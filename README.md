@@ -6,40 +6,31 @@
   <img src="https://img.shields.io/github/license/singhujjawalai-stack/ShotKeeper?label=MIT&color=027DFD"/>
   <img src="https://img.shields.io/github/repo-size/singhujjawalai-stack/ShotKeeper?color=4A90DA"/>
   <img src="https://img.shields.io/badge/Flutter-027DFD?logo=flutter&logoColor=white"/>
-  <img src="https://img.shields.io/badge/Status-Active-4CAF50"/>
+  <img src="https://img.shields.io/badge/APK-releases-4CAF50"/>
 </p>
 
-<p align="center">
-  <b>Screenshot retention manager — save what matters, keep it safe.</b><br/>
-  <i>Capture. Organize. Search. Secure. Modern Flutter storage with permission-aware design.</i>
-</p>
+<p align="center">Screenshot retention manager. Capture. Organize. Search. Secure.</p>
 
 ---
 
-## ✨ What Makes This Different
+## Features
+- Capture and retain screenshots securely
+- Organize by date, tags, or categories
+- Search through your library
+- Secure storage with permission handling
+- Clean Material design UI
 
-| Native Repo | This One |
-|---|---|
-| Generic `README.md` template | Custom branded header with Flutter-blue theme |
-| Plain description | Philosophy, feature comparison table, aesthetic identity |
-| Raw links | Badge ecosystem (license, size, status, framework, download) |
-| Just code | Story — "save what matters, keep it safe" |
+## Download
 
-## 🎨 Theme
+[ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk)
 
-> **Flutter Blue** (`#027DFD`) · Clean white · Material design · No clutter
-
-Every badge, link, and divider follows the same visual language as the app interface.
-
-## 📥 Get the App
+## Build
 
 ```bash
-# Direct download from releases
-https://github.com/singhujjawalai-stack/ShotKeeper/releases/download/ShotKeeper-v1.0-release.apk
+flutter pub get
+flutter build apk --release
 ```
 
-Or visit [`releases/`](releases/) to browse.
+## License
 
----
-
-Built with Flutter · Profile: [singhujjawalai-stack](https://github.com/singhujjawalai-stack) · No rush.
+MIT — see [LICENSE](LICENSE)
