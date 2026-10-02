@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="#0A0A0F"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <!-- Header Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:background="#12121E"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Screenshot Detected"
+                android:textColor="#EAEAEA"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:letterSpacing="-0.04" />
+
+            <TextView
+                android:id="@+id/screenshotName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="screenshot.png"
+                android:textColor="#A0A0B0"
+                android:textSize="15sp"
+                android:layout_marginTop="8dp"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <!-- Thumbnail Preview -->
+            <ImageView
+                android:id="@+id/screenshotThumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="180dp"
+                android:layout_marginTop="16dp"
+                android:scaleType="centerCrop"
+                android:background="#1A1A2E"
+                android:contentDescription="Screenshot preview" />
+        </LinearLayout>
+
+        <!-- Timeline Preview -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:background="#12121E"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/timelinePreview"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Will delete by: ---"
+                    android:textColor="#818CF8"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/timelineBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="10dp"
+                android:layout_marginTop="10dp"
+                android:max="100"
+                android:progress="30"
+                android:progressTint="#6366F1"
+                android:progressBackgroundTint="#312E81" />
+        </LinearLayout>
+
+        <!-- Quick Preset Buttons -->
+        <LinearLayout
+            android:id="@+id/presetButtonsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Custom Duration -->
+        <Button
+            android:id="@+id/customOptionBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Custom Duration..."
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#4F46E5"
+            android:textAllCaps="false"
+            android:textSize="15sp"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="12dp"
+            android:layout_marginBottom="16dp" />
+
+        <LinearLayout
+            android:id="@+id/customGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <EditText
+                android:id="@+id/customValue"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:inputType="number"
+                android:hint="4"
+                android:textColor="#EAEAEA"
+                android:textColorHint="#777777"
+                android:backgroundTint="#4F46E5"
+                android:padding="10dp"
+                android:textSize="15sp" />
+
+            <Spinner
+                android:id="@+id/customUnit"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:layout_marginStart="8dp"
+                android:popupBackground="#12121E"
+                android:dropDownVerticalOffset="8dp" />
+
+            <Button
+                android:id="@+id/customScheduleBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Set"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#818CF8"
+                android:textAllCaps="false"
+                android:layout_marginStart="8dp"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="10dp" />
+        </LinearLayout>
+
+        <!-- Remember for future -->
+        <CheckBox
+            android:id="@+id/rememberCheckbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Remember for future screenshots"
+            android:textColor="#A0A0B0"
+            android:buttonTint="#6366F1"
+            android:layout_marginBottom="8dp" />
+
+        <Space android:layout_width="match_parent" android:layout_height="12dp" />
+
+        <!-- Action Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <Button
+                android:id="@+id/deleteNowBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Delete Now"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#EF4444"
+                android:textAllCaps="false"
+                android:textSize="15sp"
+                android:paddingVertical="14dp"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/scheduleBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Confirm Schedule"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#4F46E5"
+                android:textAllCaps="false"
+                android:textSize="15sp"
+                android:paddingVertical="14dp"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

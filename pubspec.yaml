@@ -1,0 +1,13 @@
+name: shot_keeper
+description: Screenshot retention manager
+version: 1.0.0+2006
+publish_to: 'none'
+environment:
+  sdk: '>=3.13.3 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.2
+  permission_handler: ^11.3.0
+flutter:
+  uses-material-design: true
