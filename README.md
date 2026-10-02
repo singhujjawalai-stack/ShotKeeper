@@ -1,17 +1,38 @@
-# shot_keeper
+# ShotKeeper
 
-A new Flutter project.
+> Screenshot retention manager — save what matters, keep it safe.
 
-## Getting Started
+A Flutter app for managing and retaining screenshots with smart storage, search, and organization features.
 
-This project is a starting point for a Flutter application.
+## Features
 
-A few resources to get you started if this is your first Flutter project:
+- **Capture** and retain screenshots securely
+- **Organize** by date, tags, or categories
+- **Search** through your screenshot library
+- **Secure storage** with permission handling
+- **Clean UI** with modern Material design
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Download
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Download the latest release APK from the [`releases/`](releases/) folder:
+
+- [ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk) (expected)
+
+> Note: Build your own APK using `flutter build apk --release`. See `BUILD_REPORT.md` for build details.
+
+## Build
+
+```bash
+flutter pub get
+flutter build apk --release
+```
+
+See [BUILD_REPORT.md](BUILD_REPORT.md) for full build instructions.
+
+## License
+
+MIT — see [LICENSE](LICENSE)
+
+---
+
+Built with Flutter · Profile: [singhujjawalai-stack](https://github.com/singhujjawalai-stack)
