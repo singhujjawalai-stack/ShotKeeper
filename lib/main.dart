@@ -116,6 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<String> _selectedBatchPaths = [];
   Map<String, int> _scheduledDeletions = {};
   Timer? _liveTicker;
+  String _searchQuery = '';
 
   static const _keyEnabled = 'shot_keeper_enabled';
   static const _keyPeriod = 'shot_keeper_period';
@@ -1002,6 +1003,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
+                // Search Bar
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search screenshots by name...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFF3F4F6),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                ),
+                const SizedBox(height: 10),
+
                 // Gallery Header & Legend
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1042,38 +1057,40 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Gallery Grid (Newest on Top)
                 Expanded(
-                  child: _detectedImages.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.photo_library_outlined, size: 56, color: Colors.grey.withOpacity(0.5)),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No screenshots found',
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      color: Colors.grey,
-                                    ),
-                              ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'Take a screenshot or tap refresh above',
-                                style: TextStyle(color: Colors.grey, fontSize: 13),
-                              ),
-                            ],
-                          ),
-                        )
-                      : GridView.builder(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                            childAspectRatio: 0.72,
-                          ),
-                          itemCount: _detectedImages.length,
-                          itemBuilder: (context, index) {
-                            final item = _detectedImages[index];
-                            final name = item['name']?.toString() ?? 'unknown';
+                  child: Builder(
+                    builder: (context) {
+                      final filtered = _searchQuery.isEmpty
+                        ? _detectedImages
+                        : _detectedImages.where((item) {
+                            final name = item['name']?.toString() ?? '';
+                            return name.toLowerCase().contains(_searchQuery);
+                          }).toList();
+                    if (filtered.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.search_off, size: 56, color: Colors.grey.withOpacity(0.5)),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No results for "$_searchQuery"',
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: 0.72,
+                      ),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final item = filtered[index];
+                        final name = item['name']?.toString() ?? 'unknown';
                             final path = item['path']?.toString() ?? '';
                             final isSelected = _selectedBatchPaths.contains(path);
                             final isScheduled = _scheduledDeletions.containsKey(path);
@@ -1222,8 +1239,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             );
                           },
-                        ),
-                ),
+                        );
+                      },
+                    ),
+                  ),
               ],
             ),
           ),

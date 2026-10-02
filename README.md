@@ -15,14 +15,17 @@
 
 ## Features
 - Capture and retain screenshots securely
-- Organize by date, tags, or categories
-- Search through your library
+- Search through your library by filename
+- Schedule auto-deletion with custom timers
+- Batch operations on multiple screenshots
 - Secure storage with permission handling
 - Clean Material design UI
 
 ## Download
 
-[ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk)
+**Latest:** [ShotKeeper-v1.1-release.apk](releases/ShotKeeper-v1.1-release.apk) — Added search functionality
+
+**Previous:** [ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk)
 
 ## Build
 
