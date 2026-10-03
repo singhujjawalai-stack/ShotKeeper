@@ -127,6 +127,9 @@ class MainActivity : FlutterActivity() {
                     val delaySeconds = (call.argument<Number>("delay_seconds"))?.toLong() ?: 0L
                     if (path != null) {
                         val targetMs = DeletionManager.scheduleDeletion(this, path, delaySeconds)
+                        // Refresh notification with new schedule info
+                        val serviceIntent = Intent(this, ScreenshotDetectorService::class.java)
+                        startForegroundService(serviceIntent)
                         result.success(targetMs.toString())
                     } else {
                         result.error("INVALID_ARGS", "Path cannot be null", null)
@@ -137,6 +140,8 @@ class MainActivity : FlutterActivity() {
                     val delaySeconds = (call.argument<Number>("delay_seconds"))?.toLong() ?: 0L
                     if (paths != null) {
                         val targetMs = DeletionManager.scheduleBatchDeletion(this, paths, delaySeconds)
+                        val serviceIntent = Intent(this, ScreenshotDetectorService::class.java)
+                        startForegroundService(serviceIntent)
                         result.success(targetMs.toString())
                     } else {
                         result.error("INVALID_ARGS", "Paths cannot be null", null)
