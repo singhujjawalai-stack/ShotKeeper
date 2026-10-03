@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
+import 'splash_screen.dart';
 
 void main() => runApp(const ShotKeeperApp());
 
@@ -89,7 +90,7 @@ class ShotKeeperApp extends StatelessWidget {
         ),
       ),
       themeMode: ThemeMode.system,
-      home: const HomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }
