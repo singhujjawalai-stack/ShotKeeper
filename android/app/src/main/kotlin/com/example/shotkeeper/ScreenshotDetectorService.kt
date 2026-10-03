@@ -183,12 +183,22 @@ class ScreenshotDetectorService : Service() {
     private fun getFlutterCount(): Int = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
         .getInt("flutter.shot_keeper_screenshot_count", 0)
 
-    private fun buildStatusNotification(): Notification = Notification.Builder(this, CHANNEL_ID)
-        .setContentTitle("ShotKeeper is monitoring screenshots")
-        .setContentText("$count screenshots detected")
-        .setSmallIcon(android.R.drawable.ic_menu_gallery)
-        .setOngoing(true)
-        .build()
+    private fun buildStatusNotification(): Notification {
+        val scheduled = DeletionManager.getScheduledDeletions(this)
+        val contentText = if (scheduled.isNotEmpty()) {
+            val nextMs = scheduled.values.minOrNull() ?: 0L
+            val nextTime = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(nextMs))
+            "${scheduled.size} scheduled · Next deletion: $nextTime"
+        } else {
+            "No scheduled deletions"
+        }
+        return Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle("ShotKeeper is monitoring screenshots")
+            .setContentText(contentText)
+            .setSmallIcon(android.R.drawable.ic_menu_gallery)
+            .setOngoing(true)
+            .build()
+    }
 
     private fun updateStatusNotification() {
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildStatusNotification())
