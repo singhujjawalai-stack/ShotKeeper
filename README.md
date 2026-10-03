@@ -6,7 +6,7 @@
 <p align="center">
   <img src="https://img.shields.io/github/license/singhujjawalai-stack/ShotKeeper?label=MIT&color=027DFD"/>
   <img src="https://img.shields.io/github/repo-size/singhujjawalai-stack/ShotKeeper?color=4A90DA"/>
-  <img src="https://img.shields.io/badge/Flutter-027DFD?logo=https://raw.githubusercontent.com/singhujjawalai-stack/ShotKeeper/main/dependencies/logo.png&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Flutter-027DFD?logo=flutter&logoColor=white"/>
   <img src="https://img.shields.io/badge/APK-releases-4CAF50"/>
 </p>
 
