@@ -1,20 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@android:color/black" />
-    <item
-        android:width="128dp"
-        android:height="128dp"
-        android:gravity="center">
-        <shape android:shape="oval">
-            <solid android:color="#112244" />
-        </shape>
-    </item>
-    <item
-        android:width="64dp"
-        android:height="64dp"
-        android:gravity="center">
+    <item android:gravity="center">
         <bitmap
             android:gravity="center"
             android:src="@mipmap/ic_launcher" />
+    </item>
+    <item
+        android:gravity="center_horizontal|bottom"
+        android:bottom="120dp">
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/splash_text" />
     </item>
 </layer-list>
