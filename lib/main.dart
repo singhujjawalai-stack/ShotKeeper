@@ -90,7 +90,7 @@ class ShotKeeperApp extends StatelessWidget {
         ),
       ),
       themeMode: ThemeMode.system,
-      home: const SplashScreen(),
+      home: const HomeScreen(),
     );
   }
 }
