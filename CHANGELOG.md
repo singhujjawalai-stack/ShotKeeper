@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.0 — 2026-10-02
+## v1.2.0 — 2026-10-02
 - Added search functionality (filter screenshots by filename)
 - Search bar above gallery grid
 - Real-time filtering as you type

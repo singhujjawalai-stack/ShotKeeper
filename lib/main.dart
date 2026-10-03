@@ -117,6 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, int> _scheduledDeletions = {};
   Timer? _liveTicker;
   String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
 
   static const _keyEnabled = 'shot_keeper_enabled';
   static const _keyPeriod = 'shot_keeper_period';
@@ -1005,12 +1006,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Search Bar
                 TextField(
+                  controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Search screenshots by name...',
                     prefixIcon: const Icon(Icons.search, size: 20),
                     filled: true,
                     fillColor: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFF3F4F6),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
