@@ -1294,8 +1294,11 @@ class ScheduleDetailsScreen extends StatelessWidget {
             onPressed: () => Navigator.pop(dialogCtx, false),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text('Delete'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             onPressed: () => Navigator.pop(dialogCtx, true),
           ),
         ],
