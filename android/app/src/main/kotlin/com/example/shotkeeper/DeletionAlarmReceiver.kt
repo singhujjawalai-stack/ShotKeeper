@@ -12,5 +12,12 @@ class DeletionAlarmReceiver : BroadcastReceiver() {
         Log.i("DeletionAlarmReceiver", "Received action: $action")
         DeletionManager.checkAndExecuteDueDeletions(context)
         DeletionManager.scheduleNextAlarm(context)
+        // Refresh the detector service notification so line 2 reflects updated schedule
+        val refreshIntent = Intent(context, ScreenshotDetectorService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            context.startForegroundService(refreshIntent)
+        } else {
+            context.startService(refreshIntent)
+        }
     }
 }

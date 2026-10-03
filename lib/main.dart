@@ -117,6 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, int> _scheduledDeletions = {};
   Timer? _liveTicker;
   String _searchQuery = '';
+  bool _filterScheduledOnly = false;
   final TextEditingController _searchController = TextEditingController();
 
   static const _keyEnabled = 'shot_keeper_enabled';
@@ -626,7 +627,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (isBatch) {
                     try {
                       await _platform.invokeMethod('schedule_batch_deletion', {
-                        'paths': paths,
+                        'paths': List<String>.from(paths),
                         'delay_seconds': delaySec,
                       });
                     } catch (_) {}
@@ -805,6 +806,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       } catch (_) {}
                       await _loadScheduledDeletions();
                       if (mounted) {
+                        setState(() {
+                          if (_scheduledDeletions.isEmpty) _filterScheduledOnly = false;
+                        });
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Scheduled deletion cancelled')),
                         );
@@ -1007,6 +1011,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Search Bar
                 TextField(
                   controller: _searchController,
+                  autofocus: false,
+                  keyboardType: TextInputType.text,
                   decoration: InputDecoration(
                     hintText: 'Search screenshots by name...',
                     prefixIcon: const Icon(Icons.search, size: 20),
@@ -1039,27 +1045,61 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                     ),
                     if (_scheduledDeletions.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.amber.withOpacity(0.4)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.timer, size: 13, color: Colors.amber),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${_scheduledDeletions.length} scheduled',
-                              style: const TextStyle(
-                                color: Colors.amber,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      InkWell(
+                        onTap: () => setState(() => _filterScheduledOnly = !_filterScheduledOnly),
+                        borderRadius: BorderRadius.circular(20),
+                        highlightColor: Colors.amber.withOpacity(0.2),
+                        splashColor: Colors.amber.withOpacity(0.35),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _filterScheduledOnly
+                                ? Colors.amber.shade700.withOpacity(0.25)
+                                : Colors.amber.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _filterScheduledOnly
+                                  ? Colors.amber.shade700.withOpacity(0.6)
+                                  : Colors.amber.withOpacity(0.4),
+                              width: _filterScheduledOnly ? 1.2 : 0.5,
                             ),
-                          ],
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.amber.withOpacity(_filterScheduledOnly ? 0.25 : 0.05),
+                                blurRadius: _filterScheduledOnly ? 6 : 2,
+                                offset: Offset(0, _filterScheduledOnly ? 2 : 1),
+                              ),
+                            ],
+                          ),
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 300),
+                            opacity: 1.0,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AnimatedRotation(
+                                  duration: const Duration(milliseconds: 300),
+                                  turns: _filterScheduledOnly ? 0.02 : 0,
+                                  child: const Icon(Icons.timer, size: 13, color: Colors.amber),
+                                ),
+                                const SizedBox(width: 4),
+                                AnimatedDefaultTextStyle(
+                                  duration: const Duration(milliseconds: 200),
+                                  style: TextStyle(
+                                    color: Colors.amber,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
+                                  ),
+                                  child: Text(
+                                    '${_scheduledDeletions.length} scheduled',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -1070,12 +1110,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Builder(
                     builder: (context) {
+                      final sourceImages = _filterScheduledOnly
+                          ? _detectedImages.where((item) => _scheduledDeletions.containsKey(item['path']?.toString() ?? '')).toList()
+                          : _detectedImages;
                       final filtered = _searchQuery.isEmpty
-                        ? _detectedImages
-                        : _detectedImages.where((item) {
-                            final name = item['name']?.toString() ?? '';
-                            return name.toLowerCase().contains(_searchQuery);
-                          }).toList();
+                          ? sourceImages
+                          : sourceImages.where((item) {
+                              final name = item['name']?.toString() ?? '';
+                              return name.toLowerCase().contains(_searchQuery);
+                            }).toList();
                     if (filtered.isEmpty) {
                       return Center(
                         child: Column(
@@ -1359,7 +1402,12 @@ class ScheduleDetailsScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (imagePaths.length == 1) ...[
+                        if (imagePaths.isEmpty) ...[
+                          Text(
+                            'No screenshots selected',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey),
+                          ),
+                        ] else if (imagePaths.length == 1) ...[
                           ClipRRect(
                             borderRadius: BorderRadius.circular(16),
                             child: Container(
@@ -1396,23 +1444,48 @@ class ScheduleDetailsScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           SizedBox(
-                            height: 240,
-                            child: GridView.builder(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                              ),
+                            height: 120,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
                               itemCount: imagePaths.length,
                               itemBuilder: (ctx, idx) {
                                 final p = imagePaths[idx];
-                                return ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFE5E7EB),
-                                    child: File(p).existsSync()
-                                        ? Image.file(File(p), fit: BoxFit.cover)
-                                        : const Icon(Icons.image),
+                                return Container(
+                                  width: 100,
+                                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        File(p).existsSync()
+                                            ? Image.file(File(p), fit: BoxFit.cover)
+                                            : Container(
+                                                color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFE5E7EB),
+                                                child: const Icon(Icons.image),
+                                              ),
+                                        Positioned(
+                                          bottom: 0,
+                                          left: 0,
+                                          right: 0,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                                            color: Colors.black.withOpacity(0.6),
+                                            child: Text(
+                                              p.split(RegExp(r'[/\\]')).last,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 );
                               },
