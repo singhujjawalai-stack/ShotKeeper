@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="dependencies/logo.png" alt="ShotKeeper" width="120"/>
+  <img src="assets/logo.png" alt="ShotKeeper" width="120"/>
   <br/>ShotKeeper
 </h1>
 
