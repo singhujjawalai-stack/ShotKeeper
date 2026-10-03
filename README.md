@@ -1,5 +1,6 @@
 <h1 align="center">
-  <img src="https://img.shields.io/badge/ShotKeeper-027DFD?style=for-the-badge&logo=https://raw.githubusercontent.com/singhujjawalai-stack/ShotKeeper/main/dependencies/logo.png&logoColor=white" alt="ShotKeeper"/>
+  <img src="dependencies/logo.png" alt="ShotKeeper" width="120"/>
+  <br/>ShotKeeper
 </h1>
 
 <p align="center">
