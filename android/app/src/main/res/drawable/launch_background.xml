@@ -8,7 +8,7 @@
         android:height="128dp"
         android:gravity="center">
         <shape android:shape="oval">
-            <solid android:color="#16213E" />
+            <solid android:color="#F5F5F5" />
         </shape>
     </item>
     <!-- Logo centered, scaled by system -->
