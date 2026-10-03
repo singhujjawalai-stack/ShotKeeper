@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.3 — 2026-10-03
+- Search pill: second-tap toggle to filter scheduled-only; 19-point animation system
+- Batch delete: horizontal scrollable preview row; generic batch messages
+- Notification refresh: updates on cancel/delete; `DeletionAlarmReceiver` restarts service
+- Search keyboard: `autofocus: false`
+- Schedule: removed extra `ScheduleDetailsScreen`; popup confirms directly with preview
+
 ## v1.2.0 — 2026-10-03
 - Added clear (cross) icon to search bar for one-tap search reset
 - Search controller handles both visual text and query state cleanly
