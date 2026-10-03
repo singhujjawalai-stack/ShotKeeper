@@ -1,6 +1,12 @@
 # Changelog
 
-## v1.2.0 — 2026-10-02
+## v1.2.0 — 2026-10-03
+- Added clear (cross) icon to search bar for one-tap search reset
+- Search controller handles both visual text and query state cleanly
+- Release APK rebuilt and pushed (48.3MB)
+- Zero breaking changes
+
+## v1.1.0 — 2026-10-02
 - Added search functionality (filter screenshots by filename)
 - Search bar above gallery grid
 - Real-time filtering as you type
