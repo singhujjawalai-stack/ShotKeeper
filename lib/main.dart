@@ -567,51 +567,50 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Text('Cancel'),
                 onPressed: () => Navigator.pop(c),
               ),
-              if (!isBatch)
-                TextButton(
-                  style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-                  child: const Text('Delete Now'),
-                  onPressed: () async {
-                    // Confirm before immediate deletion to prevent accidental loss
-                    final confirmed = await showDialog<bool>(
-                      context: c,
-                      builder: (dialogCtx) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                        title: const Text('Delete Now?', style: TextStyle(fontWeight: FontWeight.bold)),
-                        content: const Text('This screenshot will be permanently deleted immediately. Continue?'),
-                        actions: [
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFF6B7280),
-                            ),
-                            child: const Text('Cancel'),
-                            onPressed: () => Navigator.pop(dialogCtx, false),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFEF4444),
-                              foregroundColor: Colors.white,
-                            ),
-                            child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            onPressed: () => Navigator.pop(dialogCtx, true),
-                          ),
-                        ],
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                child: const Text('Delete Now'),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: c,
+                    builder: (dialogCtx) => AlertDialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      title: const Text('Delete Now?', style: TextStyle(fontWeight: FontWeight.bold)),
+                      content: Text(
+                        isBatch ? 'These ${paths.length} screenshots will be permanently deleted. Continue?' : 'This screenshot will be permanently deleted immediately. Continue?',
                       ),
-                    );
-                    if (confirmed != true) return;
-                    Navigator.pop(c);
-                    try {
-                      await _platform.invokeMethod('delete_now', {'path': paths.first});
-                    } catch (_) {}
-                    await _loadDetectedImages();
-                    await _loadScheduledDeletions();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Screenshot deleted')),
-                      );
+                      actions: [
+                        TextButton(
+                          style: TextButton.styleFrom(foregroundColor: const Color(0xFF6B7280)),
+                          child: const Text('Cancel'),
+                          onPressed: () => Navigator.pop(dialogCtx, false),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444), foregroundColor: Colors.white),
+                          child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          onPressed: () => Navigator.pop(dialogCtx, true),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed != true) return;
+                  Navigator.pop(c);
+                  if (isBatch) {
+                    for (final p in paths) {
+                      try { await _platform.invokeMethod('delete_now', {'path': p}); } catch (_) {}
                     }
-                  },
-                ),
+                  } else {
+                    try { await _platform.invokeMethod('delete_now', {'path': paths.first}); } catch (_) {}
+                  }
+                  await _loadDetectedImages();
+                  await _loadScheduledDeletions();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(isBatch ? 'Batch deleted' : 'Screenshot deleted')),
+                    );
+                  }
+                },
+              ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
@@ -645,17 +644,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   await _loadDetectedImages();
 
                   if (mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ScheduleDetailsScreen(
-                          imagePaths: paths,
-                          deleteDate: _formatDateTime(targetDate),
-                          onDeleted: () {
-                            _loadDetectedImages();
-                            _loadScheduledDeletions();
-                          },
-                        ),
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(isBatch ? 'Batch scheduled for deletion' : 'Scheduled deletion set'),
+                        duration: const Duration(seconds: 3),
                       ),
                     );
                   }
@@ -1297,285 +1289,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                   ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ScheduleDetailsScreen extends StatelessWidget {
-  final List<String> imagePaths;
-  final String deleteDate;
-  final VoidCallback? onDeleted;
-
-  const ScheduleDetailsScreen({
-    super.key,
-    required this.imagePaths,
-    required this.deleteDate,
-    this.onDeleted,
-  });
-
-  static const _platform = MethodChannel('shotkeeper/permission');
-
-  Future<void> _deleteNow(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Delete Now?', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(
-          imagePaths.length > 1
-              ? 'These ${imagePaths.length} screenshots will be permanently deleted. Continue?'
-              : 'This screenshot will be permanently deleted immediately. Continue?',
-        ),
-        actions: [
-          TextButton(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(dialogCtx, false),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            onPressed: () => Navigator.pop(dialogCtx, true),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    for (final path in imagePaths) {
-      try {
-        await _platform.invokeMethod('delete_now', {'path': path});
-      } catch (_) {}
-    }
-    onDeleted?.call();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(imagePaths.length > 1
-              ? '${imagePaths.length} screenshots deleted'
-              : 'Screenshot deleted'),
-        ),
-      );
-      Navigator.pop(context);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).colorScheme.primary;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scheduled Deletion'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.surface,
-              isDark ? const Color(0xFF0A0A0F) : const Color(0xFFF0F0F5),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (imagePaths.isEmpty) ...[
-                          Text(
-                            'No screenshots selected',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey),
-                          ),
-                        ] else if (imagePaths.length == 1) ...[
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Container(
-                              height: 320,
-                              color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFE5E7EB),
-                              child: File(imagePaths.first).existsSync()
-                                  ? Image.file(
-                                      File(imagePaths.first),
-                                      fit: BoxFit.contain,
-                                    )
-                                  : Center(
-                                      child: Text(
-                                        'Screenshot Preview',
-                                        style: Theme.of(context).textTheme.bodyMedium,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Center(
-                            child: Text(
-                              imagePaths.first.split(RegExp(r'[/\\]')).last,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ] else ...[
-                          Text(
-                            '${imagePaths.length} Screenshots Selected',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            height: 120,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              itemCount: imagePaths.length,
-                              itemBuilder: (ctx, idx) {
-                                final p = imagePaths[idx];
-                                return Container(
-                                  width: 100,
-                                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        File(p).existsSync()
-                                            ? Image.file(File(p), fit: BoxFit.cover)
-                                            : Container(
-                                                color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFE5E7EB),
-                                                child: const Icon(Icons.image),
-                                              ),
-                                        Positioned(
-                                          bottom: 0,
-                                          left: 0,
-                                          right: 0,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                                            color: Colors.black.withOpacity(0.6),
-                                            child: Text(
-                                              p.split(RegExp(r'[/\\]')).last,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 9,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-                        Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.alarm_on, color: Colors.amber, size: 26),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Auto-Deletion Scheduled',
-                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                            color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Deletion Date & Time:',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  deleteDate,
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: primaryColor,
-                                      ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  imagePaths.length > 1
-                                      ? 'These ${imagePaths.length} screenshots will be permanently deleted from your device automatically when the timer expires.'
-                                      : 'This screenshot will be permanently deleted from your device automatically when the timer expires.',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: isDark ? Colors.white70 : Colors.black54,
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.redAccent,
-                          side: const BorderSide(color: Colors.redAccent),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        icon: const Icon(Icons.delete_forever),
-                        label: const Text('Delete Now'),
-                        onPressed: () => _deleteNow(context),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        icon: const Icon(Icons.check),
-                        label: const Text('Done'),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),

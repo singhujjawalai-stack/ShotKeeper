@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.3 — 2026-10-03
+- Scheduled pill (amber badge) with second-tap toggle filter and subtle interactive styling
+- Batch delete: removed extra confirmation screen
+- Notification refresh: updates on cancel/delete; `DeletionAlarmReceiver` restarts service
+- Search keyboard: `autofocus: false`
+- Schedule: removed extra `ScheduleDetailsScreen`; popup confirms directly with preview
+
 ## v1.2.0 — 2026-10-03
 - Added clear (cross) icon to search bar for one-tap search reset
 - Search controller handles both visual text and query state cleanly
