@@ -151,6 +151,8 @@ class MainActivity : FlutterActivity() {
                     val path = call.argument<String>("path")
                     if (path != null) {
                         DeletionManager.cancelSchedule(this, path)
+                        val serviceIntent = Intent(this, ScreenshotDetectorService::class.java)
+                        startForegroundService(serviceIntent)
                         result.success(true)
                     } else {
                         result.error("INVALID_ARGS", "Path cannot be null", null)
@@ -160,6 +162,8 @@ class MainActivity : FlutterActivity() {
                     val path = call.argument<String>("path")
                     if (path != null) {
                         val deleted = DeletionManager.deleteFileNow(this, path)
+                        val serviceIntent = Intent(this, ScreenshotDetectorService::class.java)
+                        startForegroundService(serviceIntent)
                         result.success(deleted)
                     } else {
                         result.error("INVALID_ARGS", "Path cannot be null", null)
