@@ -27,7 +27,7 @@
 
 ## Download
 
-**Latest:** [ShotKeeper-v1.3.2-release.apk](releases/ShotKeeper-v1.3.2-release.apk) — Exclusive view chips, pinned filter, sort toggle (v1.3.2)
+**Latest:** [ShotKeeper-v1.4.0-release.apk](releases/ShotKeeper-v1.4.0-release.apk) — Swipeable fullscreen viewer, pinch-to-zoom, native Share, Hero transitions (v1.4.0)
 
 **Previous:** [ShotKeeper-v1.1-release.apk](releases/ShotKeeper-v1.1-release.apk) — Search functionality (v1.1.0)  
 [ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk) — Initial release

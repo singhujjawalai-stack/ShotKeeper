@@ -1,6 +1,6 @@
 name: shot_keeper
 description: Screenshot retention manager
-version: 1.3.2+2010
+version: 1.4.0+2012
 publish_to: 'none'
 environment:
   sdk: '>=3.13.3 <4.0.0'

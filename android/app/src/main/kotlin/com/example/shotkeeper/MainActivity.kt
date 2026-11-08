@@ -88,6 +88,29 @@ class MainActivity : FlutterActivity() {
                     prefs.edit().putInt("flutter.shot_keeper_screenshot_count", updated).apply()
                     result.success(updated.toString())
                 }
+                "share_screenshot" -> {
+                    val path = call.argument<String>("path")
+                    val file = if (path != null) java.io.File(path) else null
+                    if (file == null || !file.exists()) {
+                        result.error("not_found", "Screenshot file not found", null)
+                    } else {
+                        try {
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                this@MainActivity, "$packageName.fileprovider", file
+                            )
+                            val mime = if (file.name.endsWith(".png", true)) "image/png" else "image/jpeg"
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = mime
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(Intent.createChooser(shareIntent, "Share screenshot"))
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("share_failed", e.message, null)
+                        }
+                    }
+                }
                 "get_detected_screenshots" -> {
                     val list = mutableListOf<Map<String, String>>()
                     val projection = arrayOf(
@@ -106,13 +129,14 @@ class MainActivity : FlutterActivity() {
                     )?.use { cursor ->
                         val nameCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DISPLAY_NAME)
                         val dataCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DATA)
+                        val dateCol = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DATE_ADDED)
                         while (cursor.moveToNext()) {
                             val name = cursor.getString(nameCol) ?: continue
                             if (!name.contains("screenshot", true) && !name.contains("screen_shot", true) && !name.contains("screencap", true)) continue
                             val path = cursor.getString(dataCol) ?: continue
                             val file = java.io.File(path)
                             if (!file.exists()) continue
-                            list.add(mapOf("path" to path, "name" to name))
+                            list.add(mapOf("path" to path, "name" to name, "date" to cursor.getLong(dateCol).toString()))
                         }
                     }
                     result.success(list)

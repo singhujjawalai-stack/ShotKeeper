@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.4.0 — 2026-11-08
+- All-new fullscreen viewer: swipe between screenshots with PageView, pinch to zoom, page counter, fade/scale open transition with Hero animation from the gallery tile
+- Share screenshots anywhere — native Share sheet from the viewer, the image options sheet and the trash sheet (FileProvider-based Android share intent)
+- Viewer respects the active view (Gallery / Scheduled / Pinned) plus search and sort order
+
+## v1.3.3 — 2026-11-08
+- Info-rich gallery tiles: press-scale animation, relative date caption + filename footer, floating scheduled-countdown pill, trash pills with countdown progress ring, animated selection checkmark, image fade-in
+- Loading skeleton grid while shots are scanned — no more "No screenshots yet" flash
+- Batch mode: "All" (select-all) button, "Cancel selection" action, haptic feedback
+- Haptics across toggles, deletions, pinning and scheduling
+- Dark theme depth: unified elevated card surfaces and consistent corner radii via shared design tokens (cards / sheets / fields / tiles)
+
 ## v1.3.2 — 2026-11-08
 - Stats strip is now strictly mutually exclusive — exactly one of Gallery / Scheduled / Pinned / Trash is active at a time (Gallery + Scheduled could previously both be lit)
 - Pinned chip is now tappable and filters the gallery to pinned shots only

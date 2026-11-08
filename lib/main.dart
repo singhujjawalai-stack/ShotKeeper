@@ -10,6 +10,63 @@ void main() => runApp(const ShotKeeperApp());
 void _logPlatformError(String method, Object error) =>
     debugPrint('ShotKeeper platform call "$method" failed: $error');
 
+// ---- Design tokens ----------------------------------------------------------
+const double kRadiusCard = 18.0;   // cards & sheets
+const double kRadiusSheet = 20.0;  // dialogs & bottom sheets
+const double kRadiusField = 12.0;  // text fields, inner clips, banners
+const double kRadiusTile = 14.0;   // grid tiles & stat chips
+const int kTrashGraceMs = 7 * 24 * 60 * 60 * 1000;
+
+/// Human-readable remaining time ("3d 5h", "42m", "8s").
+String formatTimeRemaining(int targetEpochMs) {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final remainingMs = targetEpochMs - now;
+  if (remainingMs <= 0) return 'Deleting soon';
+
+  final totalSeconds = remainingMs ~/ 1000;
+  final totalMinutes = totalSeconds ~/ 60;
+  final totalHours = totalMinutes ~/ 60;
+  final totalDays = totalHours ~/ 24;
+  final totalWeeks = totalDays ~/ 7;
+  final totalMonths = totalDays ~/ 30;
+  final totalYears = totalDays ~/ 365;
+
+  if (totalYears >= 1) {
+    final remMonths = (totalDays % 365) ~/ 30;
+    return remMonths > 0 ? '${totalYears}y ${remMonths}mo' : '${totalYears}y';
+  } else if (totalMonths >= 1) {
+    final remDays = totalDays % 30;
+    return remDays > 0 ? '${totalMonths}mo ${remDays}d' : '${totalMonths}mo';
+  } else if (totalWeeks >= 1) {
+    final remDays = totalDays % 7;
+    return remDays > 0 ? '${totalWeeks}w ${remDays}d' : '${totalWeeks}w';
+  } else if (totalDays >= 1) {
+    final remHours = totalHours % 24;
+    return remHours > 0 ? '${totalDays}d ${remHours}h' : '${totalDays}d';
+  } else if (totalHours >= 1) {
+    final remMinutes = totalMinutes % 60;
+    return remMinutes > 0 ? '${totalHours}h ${remMinutes}m' : '${totalHours}h';
+  } else if (totalMinutes >= 1) {
+    final remSeconds = totalSeconds % 60;
+    return remSeconds > 0 ? '${totalMinutes}m ${remSeconds}s' : '${totalMinutes}m';
+  } else {
+    return '${totalSeconds}s';
+  }
+}
+
+/// Compact relative timestamp for tile captions ("2h ago", "Mar 3").
+String formatRelativeDate(int? addedSeconds) {
+  if (addedSeconds == null || addedSeconds <= 0) return '';
+  final dt = DateTime.fromMillisecondsSinceEpoch(addedSeconds * 1000);
+  final diff = DateTime.now().difference(dt);
+  if (diff.inSeconds < 60) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${months[dt.month - 1]} ${dt.day}';
+}
+
 class ShotKeeperApp extends StatelessWidget {
   const ShotKeeperApp({super.key});
   @override
@@ -42,7 +99,7 @@ class ShotKeeperApp extends StatelessWidget {
           elevation: 2.5,
           shadowColor: Colors.black.withValues(alpha: 0.08),
           color: const Color(0xFFFFFFFF),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusCard)),
         ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFFF8F7FB),
@@ -76,8 +133,8 @@ class ShotKeeperApp extends StatelessWidget {
         cardTheme: CardThemeData(
           elevation: 4,
           shadowColor: Colors.black.withValues(alpha: 0.8),
-          color: const Color(0xFF0A0A0F),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          color: const Color(0xFF13131B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusCard)),
         ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF000000),
@@ -125,6 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final Map<String, Map<String, dynamic>> _trash = {};
   Set<String> _pinned = {};
   bool _showTrash = false;
+  bool _loaded = false;
   // Auto-pilot rule
   bool _autoEnabled = false;
   final TextEditingController _autoValueController = TextEditingController(text: '24');
@@ -337,6 +395,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         setState(() {
           _detectedImages = list;
+          _loaded = true;
           final existingPaths = list.map((e) => e['path']?.toString()).toSet();
           _selectedBatchPaths.removeWhere((p) => !existingPaths.contains(p));
         });
@@ -344,6 +403,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       _logPlatformError('get_detected_screenshots', e);
     }
+    if (mounted) setState(() => _loaded = true);
     await _loadScheduledDeletions();
   }
 
@@ -400,6 +460,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
     setState(() => _isEnabled = value);
+    HapticFeedback.mediumImpact();
     await _saveSettings();
     if (Platform.isAndroid && value) {
       try {
@@ -412,11 +473,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _toggleBatchSelection(String path) {
+    HapticFeedback.lightImpact();
     setState(() {
       if (_selectedBatchPaths.contains(path)) {
         _selectedBatchPaths.remove(path);
       } else {
         _selectedBatchPaths.add(path);
+      }
+    });
+  }
+
+  void _selectAllBatch() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      for (final item in _detectedImages) {
+        final p = item['path']?.toString();
+        if (p != null && p.isNotEmpty && !_selectedBatchPaths.contains(p)) {
+          _selectedBatchPaths.add(p);
+        }
       }
     });
   }
@@ -442,6 +516,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// and returns the list of paths that could not be deleted.
   Future<List<String>> _deletePaths(List<String> paths) async {
     if (paths.isEmpty) return const [];
+    HapticFeedback.lightImpact();
     final failed = <String>[];
     try {
       if (paths.length > 1) {
@@ -528,7 +603,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusSheet)),
         title: const Text('Delete permanently?', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text('"$name" will be permanently deleted immediately. This cannot be undone.'),
         actions: [
@@ -560,7 +635,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusSheet)),
         title: const Text('Empty trash?', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text('${_trash.length} screenshot(s) will be permanently deleted. This cannot be undone.'),
         actions: [
@@ -603,6 +678,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _pinToggle(String path) async {
     final wasPinned = _pinned.contains(path);
+    HapticFeedback.lightImpact();
     try {
       await _platform.invokeMethod('set_pinned', {'path': path, 'pinned': !wasPinned});
     } catch (e) {
@@ -655,6 +731,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _toggleAutoRule(bool value) async {
+    HapticFeedback.mediumImpact();
     setState(() => _autoEnabled = value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyAutoEnabled, value);
@@ -713,42 +790,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String _computeDeleteDateLive(String valueStr, String unit) =>
       _formatDateTime(_computeTargetDate(valueStr, unit));
 
-  String _formatTimeRemaining(int targetEpochMs) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final remainingMs = targetEpochMs - now;
-    if (remainingMs <= 0) return 'Deleting soon';
-
-    final totalSeconds = remainingMs ~/ 1000;
-    final totalMinutes = totalSeconds ~/ 60;
-    final totalHours = totalMinutes ~/ 60;
-    final totalDays = totalHours ~/ 24;
-    final totalWeeks = totalDays ~/ 7;
-    final totalMonths = totalDays ~/ 30;
-    final totalYears = totalDays ~/ 365;
-
-    if (totalYears >= 1) {
-      final remMonths = (totalDays % 365) ~/ 30;
-      return remMonths > 0 ? '${totalYears}y ${remMonths}mo' : '${totalYears}y';
-    } else if (totalMonths >= 1) {
-      final remDays = totalDays % 30;
-      return remDays > 0 ? '${totalMonths}mo ${remDays}d' : '${totalMonths}mo';
-    } else if (totalWeeks >= 1) {
-      final remDays = totalDays % 7;
-      return remDays > 0 ? '${totalWeeks}w ${remDays}d' : '${totalWeeks}w';
-    } else if (totalDays >= 1) {
-      final remHours = totalHours % 24;
-      return remHours > 0 ? '${totalDays}d ${remHours}h' : '${totalDays}d';
-    } else if (totalHours >= 1) {
-      final remMinutes = totalMinutes % 60;
-      return remMinutes > 0 ? '${totalHours}h ${remMinutes}m' : '${totalHours}h';
-    } else if (totalMinutes >= 1) {
-      final remSeconds = totalSeconds % 60;
-      return remSeconds > 0 ? '${totalMinutes}m ${remSeconds}s' : '${totalMinutes}m';
-    } else {
-      return '${totalSeconds}s';
-    }
-  }
-
   void _openScheduleDialog({required List<String> paths}) {
     final valueController = TextEditingController(text: '4');
     String unitValue = 'hours';
@@ -762,7 +803,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final primaryColor = Theme.of(context).colorScheme.primary;
 
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusSheet)),
             titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
             actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -785,7 +826,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   if (!isBatch && paths.isNotEmpty && File(paths.first).existsSync()) ...[
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(kRadiusField),
                       child: Container(
                         height: 140,
                         width: double.infinity,
@@ -864,7 +905,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             filled: true,
                             fillColor: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFF3F4F6),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(kRadiusField),
                             ),
                           ),
                           onChanged: (v) => setDialog(() {}),
@@ -880,7 +921,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             filled: true,
                             fillColor: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFF3F4F6),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(kRadiusField),
                             ),
                           ),
                           items: ['minutes', 'hours', 'days', 'weeks', 'months', 'years']
@@ -898,7 +939,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(kRadiusField),
                       border: Border.all(color: primaryColor.withValues(alpha: 0.3)),
                     ),
                     child: Row(
@@ -933,7 +974,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final confirmed = await showDialog<bool>(
                     context: c,
                     builder: (dialogCtx) => AlertDialog(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusSheet)),
                       title: const Text('Delete Now?', style: TextStyle(fontWeight: FontWeight.bold)),
                       content: Text(
                         isBatch
@@ -978,6 +1019,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: const Text('Confirm Schedule'),
                 onPressed: () async {
+                  HapticFeedback.lightImpact();
                   final targetDate = _computeTargetDate(valueController.text, unitValue);
                   final delaySec = targetDate.difference(DateTime.now()).inSeconds.clamp(1, 365 * 86400).toInt();
                   Navigator.pop(c);
@@ -1025,6 +1067,70 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Shares one screenshot via the native share sheet (Intent.ACTION_SEND).
+  Future<void> _shareScreenshot(String path) async {
+    if (path.isEmpty || !File(path).existsSync()) {
+      _showSnack('Screenshot file not found', color: Colors.redAccent);
+      return;
+    }
+    HapticFeedback.lightImpact();
+    try {
+      await _platform.invokeMethod('share_screenshot', {'path': path});
+    } catch (e) {
+      _logPlatformError('share_screenshot', e);
+      _showSnack('Could not share screenshot', color: Colors.redAccent);
+    }
+  }
+
+  /// Opens the swipeable fullscreen viewer over the currently visible gallery
+  /// (respects the active view filter, search query and sort order).
+  void _openFullScreenViewer(String initialPath) {
+    var items = List<Map<dynamic, dynamic>>.from(_detectedImages);
+    if (_filterScheduledOnly) {
+      items = items
+          .where((e) => _scheduledDeletions.containsKey(e['path']?.toString() ?? ''))
+          .toList();
+    } else if (_filterPinnedOnly) {
+      items = items
+          .where((e) => _pinned.contains(e['path']?.toString() ?? ''))
+          .toList();
+    }
+    if (_searchQuery.isNotEmpty) {
+      items = items
+          .where((e) => (e['name']?.toString() ?? '').toLowerCase().contains(_searchQuery))
+          .toList();
+    }
+    if (!_newestFirst) items = items.reversed.toList();
+
+    final shots = items
+        .map((e) => (path: e['path']?.toString() ?? '', name: e['name']?.toString() ?? 'unknown'))
+        .where((s) => s.path.isNotEmpty)
+        .toList();
+    if (shots.isEmpty) return;
+
+    final startIdx = shots.indexWhere((s) => s.path == initialPath);
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: true,
+        transitionDuration: const Duration(milliseconds: 220),
+        reverseTransitionDuration: const Duration(milliseconds: 180),
+        pageBuilder: (_, _, _) => _ScreenshotViewer(
+          shots: shots,
+          initialIndex: startIdx < 0 ? 0 : startIdx,
+          onShare: _shareScreenshot,
+        ),
+        transitionsBuilder: (_, animation, _, child) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.94, end: 1.0)
+                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showImageOptions(String path, String name) {
     final isScheduled = _scheduledDeletions.containsKey(path);
     final isPinned = _pinned.contains(path);
@@ -1033,7 +1139,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(kRadiusSheet)),
       ),
       builder: (ctx) {
         return SafeArea(
@@ -1079,7 +1185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   const Icon(Icons.timer, size: 14, color: Colors.amber),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Scheduled: ${_formatTimeRemaining(targetMs)} left',
+                                    'Scheduled: ${formatTimeRemaining(targetMs)} left',
                                     style: const TextStyle(
                                       color: Colors.amber,
                                       fontSize: 12,
@@ -1101,36 +1207,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const Divider(),
                 ListTile(
-                  leading: const Icon(Icons.fullscreen),
-                  title: const Text('View Full Image'),
+                  leading: const Icon(Icons.share, color: Color(0xFF4F46E5)),
+                  title: const Text('Share'),
+                  subtitle: const Text('Send this screenshot to other apps'),
                   onTap: () {
                     Navigator.pop(ctx);
-                    showDialog(
-                      context: context,
-                      builder: (c) => Dialog(
-                        insetPadding: const EdgeInsets.all(12),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AppBar(
-                              title: Text(name, style: const TextStyle(fontSize: 16)),
-                              leading: IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: () => Navigator.pop(c),
-                              ),
-                              elevation: 0,
-                            ),
-                            Flexible(
-                              child: InteractiveViewer(
-                                child: File(path).existsSync()
-                                    ? Image.file(File(path), fit: BoxFit.contain, cacheWidth: 2048)
-                                    : const Center(child: Text('Image file not found')),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
+                    _shareScreenshot(path);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.fullscreen),
+                  title: const Text('View Full Image'),
+                  subtitle: _detectedImages.length > 1
+                      ? const Text('Swipe left/right to browse screenshots')
+                      : null,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openFullScreenViewer(path);
                   },
                 ),
                 ListTile(
@@ -1209,7 +1302,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (dialogCtx) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusSheet)),
                         title: const Text('Delete Now?', style: TextStyle(fontWeight: FontWeight.bold)),
                         content: const Text('This screenshot moves to trash, then is permanently deleted after 7 days. Continue?'),
                         actions: [
@@ -1259,7 +1352,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(kRadiusSheet)),
       ),
       builder: (ctx) {
         return SafeArea(
@@ -1304,7 +1397,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const Icon(Icons.delete_sweep, size: 14, color: Colors.redAccent),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Hard delete in ${_formatTimeRemaining(expiryMs)}',
+                                  'Hard delete in ${formatTimeRemaining(expiryMs)}',
                                   style: const TextStyle(
                                     color: Colors.redAccent,
                                     fontSize: 12,
@@ -1329,6 +1422,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     _restoreFromTrash(originalPath);
                   },
                 ),
+                if (trashPath.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.share, color: Color(0xFF4F46E5)),
+                    title: const Text('Share'),
+                    subtitle: const Text('Send this screenshot to other apps'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _shareScreenshot(trashPath);
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.delete_forever, color: Colors.redAccent),
                   title: const Text('Delete Permanently', style: TextStyle(color: Colors.redAccent)),
@@ -1358,7 +1461,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Expanded(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(kRadiusTile),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
@@ -1366,8 +1469,8 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(
             color: active
                 ? color.withValues(alpha: isDark ? 0.28 : 0.14)
-                : (isDark ? const Color(0xFF101018) : const Color(0xFFFFFFFF)),
-            borderRadius: BorderRadius.circular(14),
+                : (isDark ? const Color(0xFF13131B) : const Color(0xFFFFFFFF)),
+            borderRadius: BorderRadius.circular(kRadiusTile),
             border: Border.all(
               color: active ? color.withValues(alpha: 0.65) : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05)),
             ),
@@ -1476,7 +1579,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 // Top status and auto-detect toggle card
                 Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusCard)),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -1488,7 +1591,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               height: 46,
                               decoration: BoxDecoration(
                                 color: (_isEnabled ? Colors.green : Colors.grey).withValues(alpha: isDark ? 0.25 : 0.12),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(kRadiusTile),
                               ),
                               child: Icon(
                                 _isEnabled ? Icons.radar : Icons.radar_outlined,
@@ -1544,7 +1647,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
                               color: isDark ? const Color(0xFF3A2E00) : const Color(0xFFFFF7E0),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(kRadiusField),
                               border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
                             ),
                             child: Row(
@@ -1638,7 +1741,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Auto-pilot rules card
                 Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusCard)),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -1650,7 +1753,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               height: 46,
                               decoration: BoxDecoration(
                                 color: (_autoEnabled ? const Color(0xFF10B981) : Colors.grey).withValues(alpha: isDark ? 0.25 : 0.12),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(kRadiusTile),
                               ),
                               child: Icon(
                                 Icons.bolt,
@@ -1699,7 +1802,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     labelText: 'Value',
                                     filled: true,
                                     fillColor: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFF3F4F6),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(kRadiusField)),
                                   ),
                                   onChanged: (_) => _saveAutoRule(),
                                 ),
@@ -1713,7 +1816,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     labelText: 'Unit',
                                     filled: true,
                                     fillColor: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFF3F4F6),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(kRadiusField)),
                                   ),
                                   items: ['minutes', 'hours', 'days', 'weeks', 'months', 'years']
                                       .map((unit) => DropdownMenuItem(value: unit, child: Text(unit)))
@@ -1733,7 +1836,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: isDark ? const Color(0xFF0F2E1D) : const Color(0xFFECFDF5),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(kRadiusField),
                               border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                             ),
                             child: Row(
@@ -1767,7 +1870,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(kRadiusTile),
                       border: Border.all(color: primaryColor.withValues(alpha: 0.5)),
                     ),
                     child: Row(
@@ -1792,6 +1895,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const Spacer(),
+                        TextButton.icon(
+                          icon: const Icon(Icons.select_all, size: 18),
+                          label: const Text('All'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: primaryColor,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                          ),
+                          onPressed: _selectAllBatch,
+                        ),
                         TextButton.icon(
                           icon: const Icon(Icons.push_pin, size: 18),
                           label: const Text('Pin'),
@@ -1826,7 +1938,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
-                          tooltip: 'Clear selection',
+                          tooltip: 'Cancel selection',
                           onPressed: _clearBatch,
                         ),
                       ],
@@ -1843,7 +1955,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     prefixIcon: const Icon(Icons.search, size: 20),
                     filled: true,
                     fillColor: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFF3F4F6),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(kRadiusField), borderSide: BorderSide.none),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
@@ -1939,6 +2051,24 @@ class _HomeScreenState extends State<HomeScreen> {
                               final name = item['name']?.toString() ?? '';
                               return name.toLowerCase().contains(_searchQuery);
                             }).toList();
+                    // Loading skeleton (avoids flashing "No screenshots yet")
+                    if (!_loaded) {
+                      return GridView.builder(
+                        itemCount: crossAxisCount * 3,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: 0.72,
+                        ),
+                        itemBuilder: (_, _) => Container(
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF13131B) : const Color(0xFFEDEDF3),
+                            borderRadius: BorderRadius.circular(kRadiusTile),
+                          ),
+                        ),
+                      );
+                    }
                     if (filtered.isEmpty) {
                       if (_searchQuery.isNotEmpty) {
                         return Center(
@@ -1949,7 +2079,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 width: 84,
                                 height: 84,
                                 decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF101018) : const Color(0xFFEFEFF5),
+                                  color: isDark ? const Color(0xFF13131B) : const Color(0xFFEFEFF5),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(Icons.search_off, size: 38, color: Colors.grey.withValues(alpha: 0.6)),
@@ -2024,7 +2154,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     width: 84,
                                     height: 84,
                                     decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF101018) : const Color(0xFFFEF2F2),
+                                      color: isDark ? const Color(0xFF13131B) : const Color(0xFFFEF2F2),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(Icons.delete_sweep_outlined, size: 38, color: Colors.redAccent),
@@ -2046,7 +2176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     width: 84,
                                     height: 84,
                                     decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF101018) : const Color(0xFFEEF2FF),
+                                      color: isDark ? const Color(0xFF13131B) : const Color(0xFFEEF2FF),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(
@@ -2092,7 +2222,19 @@ class _HomeScreenState extends State<HomeScreen> {
                             final isPinned = !_showTrash && _pinned.contains(origPath);
                             final targetMs = _scheduledDeletions[origPath];
 
-                            return InkWell(
+                            return _ScreenshotTile(
+                              path: path,
+                              name: name,
+                              cacheWidth: cacheWidth,
+                              dateSeconds: int.tryParse(item['date']?.toString() ?? ''),
+                              isDark: isDark,
+                              primaryColor: primaryColor,
+                              isSelected: isSelected,
+                              isScheduled: isScheduled,
+                              targetMs: targetMs,
+                              isPinned: isPinned,
+                              isTrash: _showTrash,
+                              expiryMs: expiryMs,
                               onTap: () {
                                 if (_showTrash) {
                                   _showTrashSheet(origPath, name, path, expiryMs ?? 0);
@@ -2103,185 +2245,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 }
                               },
                               onLongPress: _showTrash ? null : () => _toggleBatchSelection(path),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? primaryColor
-                                        : (isScheduled
-                                            ? Colors.amber.shade700
-                                            : Colors.transparent),
-                                    width: isSelected || isScheduled ? 2.5 : 0,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.08),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      // Image preview (downsampled to tile size)
-                                      path.isNotEmpty
-                                          ? Image.file(
-                                              File(path),
-                                              fit: BoxFit.cover,
-                                              cacheWidth: cacheWidth,
-                                              errorBuilder: (_, _, _) => Container(
-                                                color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFE5E7EB),
-                                                child: const Icon(Icons.broken_image),
-                                              ),
-                                            )
-                                          : Container(
-                                              color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFE5E7EB),
-                                              child: Center(
-                                                child: Padding(
-                                                  padding: const EdgeInsets.all(4),
-                                                  child: Text(
-                                                    name,
-                                                    textAlign: TextAlign.center,
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: Theme.of(context).colorScheme.secondary,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-
-                                      // Top Status Overlay (Scheduled Badge or Selection)
-                                      if (isScheduled && targetMs != null)
-                                        Positioned(
-                                          top: 0,
-                                          left: 0,
-                                          right: 0,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                colors: [
-                                                  Colors.amber.shade900.withValues(alpha: 0.95),
-                                                  Colors.orange.shade800.withValues(alpha: 0.95),
-                                                ],
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                const Icon(Icons.timer_outlined, color: Colors.white, size: 12),
-                                                const SizedBox(width: 3),
-                                                Flexible(
-                                                  child: Text(
-                                                    _formatTimeRemaining(targetMs),
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-
-                                      // Trash countdown overlay
-                                      if (_showTrash)
-                                        Positioned(
-                                          top: 0,
-                                          left: 0,
-                                          right: 0,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                                            color: Colors.redAccent.shade700.withValues(alpha: 0.9),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                const Icon(Icons.delete_sweep, color: Colors.white, size: 12),
-                                                const SizedBox(width: 3),
-                                                Flexible(
-                                                  child: Text(
-                                                    '${_formatTimeRemaining(expiryMs ?? 0)} left',
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-
-                                      // Pin badge (Keep Forever)
-                                      if (isPinned && !isScheduled)
-                                        Positioned(
-                                          top: 6,
-                                          left: 6,
-                                          child: Container(
-                                            decoration: const BoxDecoration(
-                                              color: Colors.teal,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            padding: const EdgeInsets.all(4),
-                                            child: const Icon(Icons.push_pin, color: Colors.white, size: 12),
-                                          ),
-                                        ),
-
-                                      // Batch Selection Checkbox / Marker
-                                      if (isSelected)
-                                        Positioned(
-                                          top: 6,
-                                          right: 6,
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color: primaryColor,
-                                              shape: BoxShape.circle,
-                                              boxShadow: const [
-                                                BoxShadow(color: Colors.black26, blurRadius: 4),
-                                              ],
-                                            ),
-                                            padding: const EdgeInsets.all(4),
-                                            child: const Icon(Icons.check, color: Colors.white, size: 14),
-                                          ),
-                                        ),
-
-                                      // Bottom Filename Label
-                                      Positioned(
-                                        bottom: 0,
-                                        left: 0,
-                                        right: 0,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                                          color: Colors.black.withValues(alpha: 0.65),
-                                          child: Text(
-                                            name,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
                             );
                           },
                         );
@@ -2291,6 +2254,542 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---- Grid tile widgets ------------------------------------------------------
+
+class _ScreenshotTile extends StatefulWidget {
+  const _ScreenshotTile({
+    required this.path,
+    required this.name,
+    required this.cacheWidth,
+    required this.dateSeconds,
+    required this.isDark,
+    required this.primaryColor,
+    required this.isScheduled,
+    required this.isTrash,
+    required this.onTap,
+    required this.onLongPress,
+    this.isSelected = false,
+    this.targetMs,
+    this.isPinned = false,
+    this.expiryMs,
+  });
+
+  final String path;
+  final String name;
+  final int cacheWidth;
+  final int? dateSeconds;
+  final bool isDark;
+  final Color primaryColor;
+  final bool isSelected;
+  final bool isScheduled;
+  final int? targetMs;
+  final bool isPinned;
+  final bool isTrash;
+  final int? expiryMs;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  State<_ScreenshotTile> createState() => _ScreenshotTileState();
+}
+
+class _ScreenshotTileState extends State<_ScreenshotTile> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheduledPill = widget.isScheduled && widget.targetMs != null;
+    final trashPill = widget.isTrash && widget.expiryMs != null;
+    final placeholderColor = widget.isDark ? const Color(0xFF1A1A2E) : const Color(0xFFE5E7EB);
+
+    return Listener(
+      onPointerDown: (_) => setState(() => _pressed = true),
+      onPointerUp: (_) => setState(() => _pressed = false),
+      onPointerCancel: (_) => setState(() => _pressed = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: AnimatedScale(
+          scale: _pressed ? 0.93 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(kRadiusTile),
+              border: Border.all(
+                color: widget.isSelected
+                    ? widget.primaryColor
+                    : (widget.isScheduled ? Colors.amber.shade700 : Colors.transparent),
+                width: widget.isSelected || widget.isScheduled ? 2.5 : 0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(kRadiusTile - 2),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Image preview (downsampled to tile size, gentle fade-in)
+                  widget.path.isNotEmpty
+                      ? Hero(
+                          tag: 'shot-hero-${widget.path}',
+                          child: Image.file(
+                            File(widget.path),
+                            fit: BoxFit.cover,
+                            cacheWidth: widget.cacheWidth,
+                            frameBuilder: (_, child, frame, wasSync) {
+                              if (wasSync || frame == null) return child;
+                              return AnimatedOpacity(
+                                opacity: 1,
+                                duration: const Duration(milliseconds: 200),
+                                child: child,
+                              );
+                            },
+                            errorBuilder: (_, _, _) => Container(
+                              color: placeholderColor,
+                              child: const Icon(Icons.broken_image),
+                            ),
+                          ),
+                        )
+                      : Container(
+                          color: placeholderColor,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Text(
+                                widget.name,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context).colorScheme.secondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                  // Scheduled countdown pill (floating)
+                  if (scheduledPill)
+                    Positioned(
+                      top: 6,
+                      left: widget.isSelected ? 34 : 6,
+                      child: _BadgePill(
+                        icon: Icons.timer_outlined,
+                        text: formatTimeRemaining(widget.targetMs!),
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+
+                  // Trash pill with countdown ring
+                  if (trashPill)
+                    Positioned(
+                      top: 6,
+                      left: widget.isSelected ? 34 : 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.shade700.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _CountdownRing(
+                              progress: (1 -
+                                      ((widget.expiryMs! - DateTime.now().millisecondsSinceEpoch) /
+                                          kTrashGraceMs))
+                                  .clamp(0.0, 1.0),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${formatTimeRemaining(widget.expiryMs!)} left',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // Pin badge (Keep Forever)
+                  if (widget.isPinned)
+                    Positioned(
+                      top: scheduledPill || trashPill ? 34 : 6,
+                      left: 6,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.teal,
+                          shape: BoxShape.circle,
+                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: const Icon(Icons.push_pin, color: Colors.white, size: 11),
+                      ),
+                    ),
+
+                  // Selection marker (animated in)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: AnimatedScale(
+                      scale: widget.isSelected ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 150),
+                      curve: Curves.easeOutBack,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: widget.primaryColor,
+                          shape: BoxShape.circle,
+                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: const Icon(Icons.check, color: Colors.white, size: 14),
+                      ),
+                    ),
+                  ),
+
+                  // Bottom footer: relative date + filename
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                      color: Colors.black.withValues(alpha: 0.65),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.dateSeconds != null && !widget.isTrash)
+                            Text(
+                              formatRelativeDate(widget.dateSeconds),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          Text(
+                            widget.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BadgePill extends StatelessWidget {
+  const _BadgePill({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 11),
+          const SizedBox(width: 3),
+          Flexible(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CountdownRing extends StatelessWidget {
+  const _CountdownRing({required this.progress});
+
+  /// Fraction of the 7-day grace period that has elapsed (0 = fresh, 1 = expiring).
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 12,
+      height: 12,
+      child: CustomPaint(painter: _RingPainter(progress: progress)),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  const _RingPainter({required this.progress});
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = 1.6;
+    final radius = (size.shortestSide - stroke) / 2;
+    final center = Offset(size.width / 2, size.height / 2);
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = Colors.white24,
+    );
+
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -90 * 3.141592653589793 / 180,
+        2 * 3.141592653589793 * progress,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.white,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter oldDelegate) => oldDelegate.progress != progress;
+}
+
+// ---- Fullscreen screenshot viewer (swipeable) -------------------------------
+
+class _ScreenshotViewer extends StatefulWidget {
+  const _ScreenshotViewer({
+    required this.shots,
+    required this.onShare,
+    this.initialIndex = 0,
+  });
+
+  /// Visible screenshots in their current view order.
+  final List<({String path, String name})> shots;
+  final void Function(String path) onShare;
+  final int initialIndex;
+
+  @override
+  State<_ScreenshotViewer> createState() => _ScreenshotViewerState();
+}
+
+class _ScreenshotViewerState extends State<_ScreenshotViewer> {
+  late final PageController _pageController = PageController(initialPage: widget.initialIndex);
+  final TransformationController _transform = TransformationController();
+  late int _index = widget.initialIndex.clamp(0, widget.shots.length - 1);
+  bool _zoomed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _transform.addListener(_onTransformChanged);
+  }
+
+  @override
+  void dispose() {
+    _transform.removeListener(_onTransformChanged);
+    _transform.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onTransformChanged() {
+    final zoomed = _transform.value.getMaxScaleOnAxis() > 1.02;
+    if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shot = widget.shots[_index];
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Material(
+        color: Colors.black,
+        child: Stack(
+          children: [
+            // Swipeable, zoomable pages
+            PageView.builder(
+              controller: _pageController,
+              itemCount: widget.shots.length,
+              onPageChanged: (i) {
+                _transform.value = Matrix4.identity();
+                setState(() => _index = i);
+              },
+              itemBuilder: (context, i) {
+                final page = widget.shots[i];
+                final file = File(page.path);
+                return InteractiveViewer(
+                  transformationController: _transform,
+                  panEnabled: _zoomed,
+                  maxScale: 4.0,
+                  child: Center(
+                    child: Hero(
+                      tag: 'shot-hero-${page.path}',
+                      child: file.existsSync()
+                          ? Image.file(
+                              file,
+                              fit: BoxFit.contain,
+                              cacheWidth: 2048,
+                              errorBuilder: (_, _, _) => const Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.broken_image, color: Colors.white30, size: 56),
+                                  SizedBox(height: 12),
+                                  Text('Image file not found', style: TextStyle(color: Colors.white38)),
+                                ],
+                              ),
+                            )
+                          : const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.broken_image, color: Colors.white30, size: 56),
+                                SizedBox(height: 12),
+                                Text('Image file not found', style: TextStyle(color: Colors.white38)),
+                              ],
+                            ),
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            // Top bar (close / filename / share)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x8A000000), Colors.transparent],
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        tooltip: 'Close viewer',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 150),
+                          child: Text(
+                            shot.name,
+                            key: ValueKey(shot.path),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.share, color: Colors.white),
+                        tooltip: 'Share screenshot',
+                        onPressed: () => widget.onShare(shot.path),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Page counter
+            if (widget.shots.length > 1)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  top: false,
+                  child: Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${_index + 1} / ${widget.shots.length}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
