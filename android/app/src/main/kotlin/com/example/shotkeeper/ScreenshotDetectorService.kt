@@ -26,7 +26,10 @@ class ScreenshotDetectorService : Service() {
         private const val KEY_BASELINED = "screenshots_baselined"
         private const val KEY_PROCESSED = "processed_screenshot_ids"
         private const val KEY_LAST_SCAN = "last_scan_seconds"
-        private const val POLL_INTERVAL_MS = 10_000L
+            private const val POLL_INTERVAL_MS = 10_000L
+
+        @Volatile
+        var isRunning = false
     }
 
     private lateinit var workerThread: HandlerThread
@@ -39,10 +42,13 @@ class ScreenshotDetectorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         val logFile = File(getExternalFilesDir(null), "service_verification_log.txt")
         logFile.appendText("[${System.currentTimeMillis()}] SERVICE CREATED\n")
         createNotificationChannels()
         startForeground(NOTIFICATION_ID, buildStatusNotification())
+        // Make sure the revive-watchdog is armed (self-rescheduling exact alarm).
+        DeletionManager.scheduleWatchdog(this)
         workerThread = HandlerThread("ShotKeeperMediaScan").also { it.start() }
         worker = Handler(workerThread.looper)
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -147,7 +153,18 @@ class ScreenshotDetectorService : Service() {
         val flutterPrefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
         count = flutterPrefs.getInt("flutter.shot_keeper_screenshot_count", 0) + 1
         flutterPrefs.edit().putInt("flutter.shot_keeper_screenshot_count", count).apply()
-        Log.i(TAG, "Detected screenshot: $displayName ($uri), count=$count")
+
+        // Auto-pilot rule: schedule retention for the new screenshot instantly,
+        // unless it is pinned (Keep Forever). The rule lives in the shared
+        // Flutter prefs, so changes from the UI apply immediately.
+        var autoScheduled = false
+        val autoEnabled = flutterPrefs.getBoolean("flutter.shot_keeper_auto_enabled", false)
+        if (autoEnabled && path != null && !DeletionManager.isPinned(this, path)) {
+            val seconds = flutterPrefs.getInt("flutter.shot_keeper_auto_seconds", 24 * 60 * 60)
+            DeletionManager.scheduleDeletion(this, path, seconds.toLong())
+            autoScheduled = true
+            Log.i(TAG, "Auto-pilot scheduled deletion for $displayName in ${seconds}s")
+        }
         updateStatusNotification()
 
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -163,7 +180,7 @@ class ScreenshotDetectorService : Service() {
         val alert = Notification.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_gallery)
             .setContentTitle("Screenshot detected")
-            .setContentText("Tap to schedule deletion for $displayName")
+            .setContentText(if (autoScheduled) "$displayName — auto-scheduled for deletion, tap to adjust" else "Tap to schedule deletion for $displayName")
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(Notification.PRIORITY_HIGH)
@@ -218,7 +235,17 @@ class ScreenshotDetectorService : Service() {
     }
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // The user swiped the app away. START_STICKY does not bring the service
+        // back reliably in that case on many OEMs, so schedule an exact restart.
+        if (DeletionManager.isDetectorEnabled(this)) {
+            DeletionManager.scheduleServiceRestart(this)
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
+        isRunning = false
         observer?.let { contentResolver.unregisterContentObserver(it) }
         if (::workerThread.isInitialized) workerThread.quitSafely()
         super.onDestroy()

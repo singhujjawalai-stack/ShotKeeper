@@ -83,7 +83,7 @@ class ScreenshotDialogActivity : Activity() {
         }
         findViewById<Button>(R.id.deleteNowBtn).setOnClickListener {
             if (path.isNotEmpty()) {
-                DeletionManager.deleteFileNow(this, path)
+                DeletionManager.moveToTrash(this, path)
             }
             finish()
         }

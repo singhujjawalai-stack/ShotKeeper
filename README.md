@@ -16,15 +16,18 @@
 
 ## Features
 - Capture and retain screenshots securely
+- **Auto-pilot**: new screenshots are scheduled for deletion automatically (set it once, forget it)
+- **Trash with undo**: deletions land in a 7-day trash first — restore or delete permanently anytime
+- **Keep Forever** pins protect important screenshots from every deletion path
 - Search through your library by filename with one-tap clear icon
 - Schedule auto-deletion with custom timers
-- Batch operations on multiple screenshots
-- Secure storage with permission handling
+- Batch operations on multiple screenshots (schedule, pin, delete)
+- Reliable background detection — revives itself after reboot, app update or system kill
 - Clean Material design UI
 
 ## Download
 
-**Latest:** [ShotKeeper-v1.2.3-release.apk](releases/ShotKeeper-v1.2.3-release.apk) — Scheduled pill filter, batch preview, notification refresh (v1.2.3)
+**Latest:** [ShotKeeper-v1.3.2-release.apk](releases/ShotKeeper-v1.3.2-release.apk) — Exclusive view chips, pinned filter, sort toggle (v1.3.2)
 
 **Previous:** [ShotKeeper-v1.1-release.apk](releases/ShotKeeper-v1.1-release.apk) — Search functionality (v1.1.0)  
 [ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk) — Initial release

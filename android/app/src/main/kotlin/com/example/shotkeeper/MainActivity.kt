@@ -4,6 +4,8 @@ import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.content.Context
+import android.os.PowerManager
 import android.provider.Settings
 import android.content.Intent
 
@@ -65,6 +67,7 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "start_detector" -> {
+                    DeletionManager.setDetectorEnabled(this, true)
                     val intent = Intent(this, ScreenshotDetectorService::class.java)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                         startForegroundService(intent)
@@ -74,6 +77,7 @@ class MainActivity : FlutterActivity() {
                     result.success("started")
                 }
                 "stop_detector" -> {
+                    DeletionManager.setDetectorEnabled(this, false)
                     stopService(Intent(this, ScreenshotDetectorService::class.java))
                     result.success("stopped")
                 }
@@ -161,17 +165,120 @@ class MainActivity : FlutterActivity() {
                 "delete_now" -> {
                     val path = call.argument<String>("path")
                     if (path != null) {
-                        val deleted = DeletionManager.deleteFileNow(this, path)
+                        val moved = DeletionManager.moveToTrash(this, path)
                         val serviceIntent = Intent(this, ScreenshotDetectorService::class.java)
                         startForegroundService(serviceIntent)
-                        result.success(deleted)
+                        result.success(moved)
                     } else {
                         result.error("INVALID_ARGS", "Path cannot be null", null)
                     }
                 }
+                "delete_batch" -> {
+                    val paths = call.argument<List<String>>("paths") ?: emptyList()
+                    val failed = mutableListOf<String>()
+                    var moved = 0
+                    for (path in paths) {
+                        if (DeletionManager.moveToTrash(this, path)) moved++ else failed.add(path)
+                    }
+                    val serviceIntent = Intent(this, ScreenshotDetectorService::class.java)
+                    startForegroundService(serviceIntent)
+                    result.success(mapOf("deleted" to moved, "failed" to failed))
+                }
+                "get_trash" -> {
+                    DeletionManager.cleanExpiredTrash(this)
+                    val trashMap = DeletionManager.getTrashMap(this)
+                    val list = mutableListOf<Map<String, String>>()
+                    val keyIter = trashMap.keys()
+                    while (keyIter.hasNext()) {
+                        val key = keyIter.next()
+                        val meta = trashMap.optJSONObject(key)
+                        if (meta != null) {
+                            list.add(
+                                mapOf(
+                                    "path" to key,
+                                    "trash" to meta.optString("t"),
+                                    "name" to meta.optString("n"),
+                                    "expiry" to meta.optLong("e").toString()
+                                )
+                            )
+                        }
+                    }
+                    result.success(list)
+                }
+                "restore_from_trash" -> {
+                    val path = call.argument<String>("path")
+                    if (path != null) {
+                        val ok = DeletionManager.restoreFromTrash(this, path)
+                        result.success(ok)
+                    } else {
+                        result.error("INVALID_ARGS", "Path cannot be null", null)
+                    }
+                }
+                "empty_trash" -> result.success(DeletionManager.emptyTrash(this))
+                "permanent_delete" -> {
+                    val path = call.argument<String>("path")
+                    if (path != null) {
+                        result.success(DeletionManager.hardDeleteTrashItem(this, path))
+                    } else {
+                        result.error("INVALID_ARGS", "Path cannot be null", null)
+                    }
+                }
+                "set_pinned" -> {
+                    val path = call.argument<String>("path")
+                    val pinned = call.argument<Boolean>("pinned") ?: false
+                    if (path != null) {
+                        DeletionManager.setPinned(this, path, pinned)
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_ARGS", "Path cannot be null", null)
+                    }
+                }
+                "get_pinned" -> {
+                    val pinned = mutableListOf<String>()
+                    val pMap = org.json.JSONObject(
+                        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                            .getString("flutter.shot_keeper_pinned", "{}") ?: "{}"
+                    )
+                    val keyIter = pMap.keys()
+                    while (keyIter.hasNext()) pinned.add(keyIter.next())
+                    result.success(pinned)
+                }
                 "check_due_deletions" -> {
-                    val count = DeletionManager.checkAndExecuteDueDeletions(this)
-                    result.success(count)
+                    val (deletedCount, failedPaths) = DeletionManager.checkAndExecuteDueDeletions(this)
+                    if (failedPaths.isNotEmpty()) {
+                        // Retried later; expose to Dart so the UI can inform the user
+                        result.success(mapOf("deleted" to deletedCount, "failed" to failedPaths))
+                    } else {
+                        result.success(mapOf("deleted" to deletedCount, "failed" to emptyList<String>()))
+                    }
+                }
+                "get_battery_optimization" -> {
+                    val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                    val ignoring = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                        pm?.isIgnoringBatteryOptimizations(packageName) == true
+                    } else {
+                        true
+                    }
+                    result.success(ignoring)
+                }
+                "request_ignore_battery_optimization" -> {
+                    try {
+                        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                        if (pm != null &&
+                            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M &&
+                            !pm.isIgnoringBatteryOptimizations(packageName)
+                        ) {
+                            startActivity(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    android.net.Uri.parse("package:$packageName")
+                                )
+                            )
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
                 }
                 else -> result.notImplemented()
             }
