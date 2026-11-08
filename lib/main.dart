@@ -168,7 +168,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isEnabled = false;
   RetentionPeriod _selectedPeriod = RetentionPeriod.threeDays;
   List<dynamic> _detectedImages = [];
@@ -202,6 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
     _loadCount();
     _loadDetectedImages();
@@ -215,10 +216,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _liveTicker?.cancel();
     _tickNotifier.dispose();
     _autoValueController.dispose();
     super.dispose();
+  }
+
+  /// Native code (detector service, dialogs, scheduled deletions) changes the
+  /// gallery/trash/schedules in the background — reconcile everything whenever
+  /// the user brings the app back to the foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadDetectedImages();
+      _loadScheduledDeletions();
+      _loadTrash();
+      _loadPinned();
+    }
   }
 
   void _initNotificationIntentListener() {
@@ -247,6 +262,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _handleNotificationScreenshot(String path) {
     _loadDetectedImages();
     _loadScheduledDeletions();
+    _loadTrash(); // native side may have moved things around before this
     if (path.isNotEmpty && File(path).existsSync()) {
       _openScheduleDialog(paths: [path]);
     }
@@ -290,6 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         await _loadScheduledDeletions();
         await _loadDetectedImages();
+        await _loadTrash(); // deleted shots land in trash — keep the counter live
         if (failed.isNotEmpty) {
           _showSnack('Could not delete ${failed.length} screenshot(s) — will retry', color: Colors.redAccent);
         }
@@ -486,16 +503,50 @@ class _HomeScreenState extends State<HomeScreen> {
   void _selectAllBatch() {
     HapticFeedback.lightImpact();
     setState(() {
-      for (final item in _detectedImages) {
-        final p = item['path']?.toString();
-        if (p != null && p.isNotEmpty && !_selectedBatchPaths.contains(p)) {
-          _selectedBatchPaths.add(p);
+      if (_showTrash) {
+        for (final p in _trash.keys) {
+          if (!_selectedBatchPaths.contains(p)) _selectedBatchPaths.add(p);
+        }
+      } else {
+        for (final item in _detectedImages) {
+          final p = item['path']?.toString();
+          if (p != null && p.isNotEmpty && !_selectedBatchPaths.contains(p)) {
+            _selectedBatchPaths.add(p);
+          }
         }
       }
     });
   }
 
   void _clearBatch() => setState(() => _selectedBatchPaths.clear());
+
+  /// Red destructive "Delete Now?" confirmation used by delete flows.
+  Future<bool> _confirmDeleteNow({required String content}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusSheet)),
+        title: const Text('Delete Now?', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(content),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF6B7280)),
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(dialogCtx, false),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
 
   void _showSnack(String message, {Color? color, String? actionLabel, VoidCallback? onAction}) {
     if (!mounted) return;
@@ -512,28 +563,51 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Deletes one or more screenshots (batch handled natively in a single call)
-  /// and returns the list of paths that could not be deleted.
-  Future<List<String>> _deletePaths(List<String> paths) async {
-    if (paths.isEmpty) return const [];
+  /// Deletes one or more screenshots (batch handled natively in a single call).
+  /// Returns how many really moved, which failed, and which were already in
+  /// trash (deleted from elsewhere earlier — no Undo needed for those).
+  Future<({List<String> failed, List<String> moved, List<String> alreadyTrashed})>
+      _deletePaths(List<String> paths) async {
+    if (paths.isEmpty) {
+      return (failed: <String>[], moved: <String>[], alreadyTrashed: <String>[]);
+    }
     HapticFeedback.lightImpact();
     final failed = <String>[];
+    final moved = <String>[];
+    final alreadyTrashed = <String>[];
     try {
       if (paths.length > 1) {
         final result = await _platform.invokeMethod('delete_batch', {'paths': paths});
         if (result is Map) {
           final failures = result['failed'];
           if (failures is List) failed.addAll(failures.map((e) => e.toString()));
+          final ok = result['deleted'];
+          if (ok is int) moved.addAll(paths.where((p) => !failed.contains(p)).take(ok));
+        } else {
+          failed.addAll(paths);
         }
       } else {
-        final ok = await _platform.invokeMethod('delete_now', {'path': paths.first});
-        if (ok != true) failed.add(paths.first);
+        final result = await _platform.invokeMethod('delete_now', {'path': paths.first});
+        if (result is Map) {
+          if (result['moved'] == true) {
+            moved.add(paths.first);
+          } else if (result['already_trashed'] == true) {
+            alreadyTrashed.add(paths.first);
+          } else {
+            failed.add(paths.first);
+          }
+        } else if (result == true) {
+          // Legacy native handler (bool-only result)
+          moved.add(paths.first);
+        } else {
+          failed.add(paths.first);
+        }
       }
     } catch (e) {
       _logPlatformError('delete', e);
       failed.addAll(paths);
     }
-    return failed;
+    return (failed: failed, moved: moved, alreadyTrashed: alreadyTrashed);
   }
 
   // ---- Trash -----------------------------------------------------------------
@@ -997,17 +1071,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                   if (confirmed != true) return;
                   if (c.mounted) Navigator.pop(c);
-                  final failed = await _deletePaths(paths);
+                  final result = await _deletePaths(paths);
                   await _loadDetectedImages();
                   await _loadScheduledDeletions();
-                  if (failed.isEmpty) {
+                  await _loadTrash();
+                  if (result.alreadyTrashed.isNotEmpty && result.moved.isEmpty) {
+                    _showSnack('Already in trash — nothing changed');
+                  } else if (result.failed.isEmpty) {
                     _showSnack(
                       isBatch ? 'Moved ${paths.length} screenshot(s) to trash' : 'Moved to trash',
                       actionLabel: 'Undo',
                       onAction: () => _undoDelete(paths),
                     );
                   } else {
-                    _showSnack('Could not delete ${failed.length} screenshot(s)', color: Colors.redAccent);
+                    _showSnack('Could not delete ${result.failed.length} screenshot(s)', color: Colors.redAccent);
                   }
                 },
               ),
@@ -1207,15 +1284,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const Divider(),
                 ListTile(
-                  leading: const Icon(Icons.share, color: Color(0xFF4F46E5)),
-                  title: const Text('Share'),
-                  subtitle: const Text('Send this screenshot to other apps'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _shareScreenshot(path);
-                  },
-                ),
-                ListTile(
                   leading: const Icon(Icons.fullscreen),
                   title: const Text('View Full Image'),
                   subtitle: _detectedImages.length > 1
@@ -1224,6 +1292,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () {
                     Navigator.pop(ctx);
                     _openFullScreenViewer(path);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.share, color: Color(0xFF4F46E5)),
+                  title: const Text('Share'),
+                  subtitle: const Text('Send this screenshot to other apps'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _shareScreenshot(path);
                   },
                 ),
                 ListTile(
@@ -1284,6 +1361,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
                 ],
+                const Divider(),
                 ListTile(
                   leading: const Icon(Icons.checklist),
                   title: Text(_selectedBatchPaths.contains(path)
@@ -1326,10 +1404,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                     if (confirmed != true) return;
                     if (ctx.mounted) Navigator.pop(ctx);
-                    final failed = await _deletePaths([path]);
+                    final result = await _deletePaths([path]);
                     await _loadDetectedImages();
                     await _loadScheduledDeletions();
-                    if (failed.isEmpty) {
+                    await _loadTrash();
+                    if (result.alreadyTrashed.isNotEmpty) {
+                      _showSnack('Already in trash — nothing changed');
+                    } else if (result.failed.isEmpty) {
                       _showSnack(
                         'Moved to trash',
                         actionLabel: 'Undo',
@@ -1863,6 +1944,111 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 12),
 
+                // Trash Batch Action Bar (Restore / Delete permanently)
+                if (_showTrash && _selectedBatchPaths.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2B1117) : const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(kRadiusTile),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${_selectedBatchPaths.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Selected',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const Spacer(),
+                            TextButton.icon(
+                              icon: const Icon(Icons.select_all, size: 18),
+                              label: const Text('All'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
+                              ),
+                              onPressed: _selectAllBatch,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 20),
+                              tooltip: 'Cancel selection',
+                              onPressed: _clearBatch,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 4,
+                          children: [
+                            TextButton.icon(
+                              icon: const Icon(Icons.restore, size: 18),
+                              label: const Text('Restore'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: primaryColor,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                              ),
+                              onPressed: () {
+                                final selected = List<String>.from(_selectedBatchPaths);
+                                _clearBatch();
+                                _undoDelete(selected);
+                              },
+                            ),
+                            TextButton.icon(
+                              icon: const Icon(Icons.delete_forever, size: 18),
+                              label: const Text('Delete Permanently'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                              ),
+                              onPressed: () async {
+                                final selected = List<String>.from(_selectedBatchPaths);
+                                final confirmed = await _confirmDeleteNow(
+                                  content:
+                                      '${selected.length} trashed screenshot(s) will be permanently deleted immediately. This cannot be undone.',
+                                );
+                                if (!confirmed) return;
+                                _clearBatch();
+                                HapticFeedback.mediumImpact();
+                                var wiped = 0;
+                                for (final p in selected) {
+                                  try {
+                                    if (await _platform.invokeMethod('permanent_delete', {'path': p}) == true) {
+                                      wiped++;
+                                    }
+                                  } catch (e) {
+                                    _logPlatformError('permanent_delete', e);
+                                  }
+                                }
+                                await _loadTrash();
+                                _showSnack(wiped == selected.length
+                                    ? 'Permanently deleted ${selected.length} screenshot(s)'
+                                    : 'Permanently deleted $wiped of ${selected.length}');
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Batch Selection Action Bar
                 if (!_showTrash && _selectedBatchPaths.isNotEmpty)
                   Container(
@@ -1873,73 +2059,147 @@ class _HomeScreenState extends State<HomeScreen> {
                       borderRadius: BorderRadius.circular(kRadiusTile),
                       border: Border.all(color: primaryColor.withValues(alpha: 0.5)),
                     ),
-                    child: Row(
+                    child: Column(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: primaryColor,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '${_selectedBatchPaths.length}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${_selectedBatchPaths.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Selected',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const Spacer(),
+                            TextButton.icon(
+                              icon: const Icon(Icons.select_all, size: 18),
+                              label: const Text('All'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: primaryColor,
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
+                              ),
+                              onPressed: _selectAllBatch,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 20),
+                              tooltip: 'Cancel selection',
+                              onPressed: _clearBatch,
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Selected',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const Spacer(),
-                        TextButton.icon(
-                          icon: const Icon(Icons.select_all, size: 18),
-                          label: const Text('All'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: primaryColor,
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                          ),
-                          onPressed: _selectAllBatch,
-                        ),
-                        TextButton.icon(
-                          icon: const Icon(Icons.push_pin, size: 18),
-                          label: const Text('Pin'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.teal,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          onPressed: () async {
-                            final targets = List<String>.from(_selectedBatchPaths);
-                            for (final p in targets) {
-                              try {
-                                await _platform.invokeMethod('set_pinned', {'path': p, 'pinned': true});
-                              } catch (e) {
-                                _logPlatformError('set_pinned', e);
-                              }
-                            }
-                            _clearBatch();
-                            await _loadPinned();
-                            await _loadScheduledDeletions();
-                            await _loadDetectedImages();
-                            _showSnack('Kept ${targets.length} screenshot(s) forever');
-                          },
-                        ),
-                        TextButton.icon(
-                          icon: const Icon(Icons.schedule, size: 18),
-                          label: const Text('Schedule'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: primaryColor,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          onPressed: () => _openScheduleDialog(paths: _selectedBatchPaths),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          tooltip: 'Cancel selection',
-                          onPressed: _clearBatch,
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 4,
+                          children: [
+                            Builder(
+                              builder: (context) {
+                                final allPinned = _selectedBatchPaths.every(_pinned.contains);
+                                return TextButton.icon(
+                                  icon: Icon(allPinned ? Icons.push_pin_outlined : Icons.push_pin, size: 18),
+                                  label: Text(allPinned ? 'Unpin' : 'Pin'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.teal,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  ),
+                                  onPressed: () async {
+                                    final targets = List<String>.from(_selectedBatchPaths);
+                                    for (final p in targets) {
+                                      try {
+                                        await _platform.invokeMethod('set_pinned', {'path': p, 'pinned': !allPinned});
+                                      } catch (e) {
+                                        _logPlatformError('set_pinned', e);
+                                      }
+                                    }
+                                    _clearBatch();
+                                    await _loadPinned();
+                                    await _loadScheduledDeletions();
+                                    await _loadDetectedImages();
+                                    _showSnack(allPinned
+                                        ? 'Removed pin from ${targets.length} screenshot(s)'
+                                        : 'Kept ${targets.length} screenshot(s) forever');
+                                  },
+                                );
+                              },
+                            ),
+                            TextButton.icon(
+                              icon: const Icon(Icons.schedule, size: 18),
+                              label: const Text('Schedule'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: primaryColor,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                              ),
+                              onPressed: () => _openScheduleDialog(paths: _selectedBatchPaths.toList()),
+                            ),
+                            if (_selectedBatchPaths.any((p) => _scheduledDeletions.containsKey(p)))
+                              TextButton.icon(
+                                icon: const Icon(Icons.timer_off, size: 18),
+                                label: const Text('Unschedule'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.amber.shade800,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                ),
+                                onPressed: () async {
+                                  final targets = _selectedBatchPaths
+                                      .where((p) => _scheduledDeletions.containsKey(p))
+                                      .toList();
+                                  for (final p in targets) {
+                                    try {
+                                      await _platform.invokeMethod('cancel_schedule', {'path': p});
+                                    } catch (e) {
+                                      _logPlatformError('cancel_schedule', e);
+                                    }
+                                  }
+                                  _clearBatch();
+                                  await _loadScheduledDeletions();
+                                  _showSnack('Cancelled ${targets.length} scheduled deletion(s)');
+                                },
+                              ),
+                            TextButton.icon(
+                              icon: const Icon(Icons.delete_forever, size: 18),
+                              label: const Text('Delete'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                              ),
+                              onPressed: () async {
+                                final selected = List<String>.from(_selectedBatchPaths);
+                                final confirmed = await _confirmDeleteNow(
+                                  content:
+                                      '${selected.length} screenshot(s) will be moved to trash, then permanently deleted after 7 days. Continue?',
+                                );
+                                if (!confirmed) return;
+                                _clearBatch();
+                                final result = await _deletePaths(selected);
+                                await _loadDetectedImages();
+                                await _loadScheduledDeletions();
+                                await _loadTrash();
+                                if (result.alreadyTrashed.isNotEmpty && result.moved.isEmpty) {
+                                  _showSnack('Already in trash — nothing changed');
+                                } else if (result.failed.isEmpty) {
+                                  _showSnack(
+                                    'Moved ${selected.length} screenshot(s) to trash',
+                                    actionLabel: 'Undo',
+                                    onAction: () => _undoDelete(selected),
+                                  );
+                                } else {
+                                  _showSnack('Could not delete ${result.failed.length} screenshot(s)',
+                                      color: Colors.redAccent);
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2217,7 +2477,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             final path = item['path']?.toString() ?? '';
                             final origPath = item['origPath']?.toString() ?? path;
                             final expiryMs = int.tryParse(item['expiry']?.toString() ?? '');
-                            final isSelected = !_showTrash && _selectedBatchPaths.contains(path);
+                            final isSelected = _selectedBatchPaths.contains(path);
                             final isScheduled = !_showTrash && _scheduledDeletions.containsKey(origPath);
                             final isPinned = !_showTrash && _pinned.contains(origPath);
                             final targetMs = _scheduledDeletions[origPath];
@@ -2236,15 +2496,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               isTrash: _showTrash,
                               expiryMs: expiryMs,
                               onTap: () {
-                                if (_showTrash) {
-                                  _showTrashSheet(origPath, name, path, expiryMs ?? 0);
-                                } else if (_selectedBatchPaths.isNotEmpty) {
+                                if (_selectedBatchPaths.isNotEmpty) {
                                   _toggleBatchSelection(path);
+                                } else if (_showTrash) {
+                                  _showTrashSheet(origPath, name, path, expiryMs ?? 0);
                                 } else {
                                   _showImageOptions(path, name);
                                 }
                               },
-                              onLongPress: _showTrash ? null : () => _toggleBatchSelection(path),
+                              onLongPress: () => _toggleBatchSelection(path),
                             );
                           },
                         );

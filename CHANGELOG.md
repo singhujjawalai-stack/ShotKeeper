@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.1 — 2026-11-08
+- Trash sync fixes: counter and trash view now update instantly after any delete, undo, due-deletion or restore; deleted-via-notification shots show up without a manual refresh
+- App reconciles all data (gallery / trash / schedules / pins) every time it returns to the foreground, so native-side changes are never missed
+- "Already in trash" state detected — delete actions on an already-trashed screenshot no longer claim success or offer a bogus Undo (the double-undo bug)
+- Batch actions in gallery: Delete Now (with Undo), Unschedule (batch cancel of scheduled deletions), Pin now toggles to Unpin
+- Batch actions in trash: long-press to select, then Restore or Delete Permanently for many items at once; select-all respects the active view
+- Image options menu reordered: View → Share → Keep Forever → Schedule controls, divider, then Batch select and Delete Now (destructive actions last)
+
 ## v1.4.0 — 2026-11-08
 - All-new fullscreen viewer: swipe between screenshots with PageView, pinch to zoom, page counter, fade/scale open transition with Hero animation from the gallery tile
 - Share screenshots anywhere — native Share sheet from the viewer, the image options sheet and the trash sheet (FileProvider-based Android share intent)

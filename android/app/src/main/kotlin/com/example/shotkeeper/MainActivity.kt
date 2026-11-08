@@ -189,10 +189,23 @@ class MainActivity : FlutterActivity() {
                 "delete_now" -> {
                     val path = call.argument<String>("path")
                     if (path != null) {
-                        val moved = DeletionManager.moveToTrash(this, path)
+                        val file = java.io.File(path)
+                        val moved: Boolean
+                        val alreadyTrashed: Boolean
+                        if (file.exists()) {
+                            moved = DeletionManager.moveToTrash(this, path)
+                            alreadyTrashed = false
+                        } else {
+                            // Original gone — it may already be sitting in trash
+                            moved = false
+                            alreadyTrashed = DeletionManager.getTrashMap(this).has(path)
+                        }
                         val serviceIntent = Intent(this, ScreenshotDetectorService::class.java)
                         startForegroundService(serviceIntent)
-                        result.success(moved)
+                        result.success(mapOf(
+                            "moved" to moved,
+                            "already_trashed" to alreadyTrashed
+                        ))
                     } else {
                         result.error("INVALID_ARGS", "Path cannot be null", null)
                     }

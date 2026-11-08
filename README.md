@@ -27,7 +27,7 @@
 
 ## Download
 
-**Latest:** [ShotKeeper-v1.4.0-release.apk](releases/ShotKeeper-v1.4.0-release.apk) — Swipeable fullscreen viewer, pinch-to-zoom, native Share, Hero transitions (v1.4.0)
+**Latest:** [ShotKeeper-v1.4.1-release.apk](releases/ShotKeeper-v1.4.1-release.apk) — Trash sync fixes, batch Delete/Unschedule in gallery, batch Restore/Delete in trash (v1.4.1)
 
 **Previous:** [ShotKeeper-v1.1-release.apk](releases/ShotKeeper-v1.1-release.apk) — Search functionality (v1.1.0)  
 [ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk) — Initial release
