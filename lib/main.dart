@@ -175,7 +175,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final List<String> _selectedBatchPaths = [];
   Map<String, int> _scheduledDeletions = {};
   Timer? _liveTicker;
-  final ValueNotifier<int> _tickNotifier = ValueNotifier(0);
   bool _batteryExempt = true;
   bool _ticking = false;
   // Trash: original path -> {trash, name, expiry}
@@ -218,7 +217,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _liveTicker?.cancel();
-    _tickNotifier.dispose();
     _autoValueController.dispose();
     super.dispose();
   }
@@ -311,7 +309,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _showSnack('Could not delete ${failed.length} screenshot(s) — will retry', color: Colors.redAccent);
         }
       }
-      _tickNotifier.value++; // Refresh countdown badges only
+      if (mounted) setState(() {}); // Refresh countdown badges
     } finally {
       _ticking = false;
     }
@@ -1599,7 +1597,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Scaffold(
+    // Back: unwinds state layers (batch selection → trash view → filter views →
+    // search) before leaving the app.
+    return PopScope(
+      canPop: _selectedBatchPaths.isEmpty &&
+          !_showTrash &&
+          !_filterScheduledOnly &&
+          !_filterPinnedOnly &&
+          _searchQuery.isEmpty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        HapticFeedback.selectionClick();
+        setState(() {
+          if (_selectedBatchPaths.isNotEmpty) {
+            _selectedBatchPaths.clear();
+          } else if (_showTrash) {
+            _showTrash = false;
+          } else if (_filterScheduledOnly || _filterPinnedOnly) {
+            _filterScheduledOnly = false;
+            _filterPinnedOnly = false;
+          } else {
+            _searchController.clear();
+            _searchQuery = '';
+          }
+        });
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
@@ -1655,9 +1678,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                 // Top status and auto-detect toggle card
                 Card(
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kRadiusCard)),
@@ -2271,12 +2297,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ],
                 ),
                 const SizedBox(height: 10),
+                    ], // top section columns
+                  ),
+                ),
+                ..._buildGallerySlivers(context),
+              ],
+            ),
+          ),
+        ),
+      ),
+      ),
+    );
+  }
 
-                // Gallery Grid (Newest on Top)
-                Expanded(
-                  child: ValueListenableBuilder<int>(
-                    valueListenable: _tickNotifier,
-                    builder: (context, _, _) {
+  /// Slivers for the screenshot grid / loading skeleton / empty states.
+  List<Widget> _buildGallerySlivers(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
                       final media = MediaQuery.of(context);
                       final crossAxisCount = (media.size.width / 110).floor().clamp(2, 6).toInt();
                       final cacheWidth = ((media.size.width / crossAxisCount) * media.devicePixelRatio).round();
@@ -2313,166 +2350,169 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             }).toList();
                     // Loading skeleton (avoids flashing "No screenshots yet")
                     if (!_loaded) {
-                      return GridView.builder(
-                        itemCount: crossAxisCount * 3,
+                      return [
+                        SliverGrid(
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                            childAspectRatio: 0.72,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            (_, _) => Container(
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF13131B) : const Color(0xFFEDEDF3),
+                                borderRadius: BorderRadius.circular(kRadiusTile),
+                              ),
+                            ),
+                            childCount: crossAxisCount * 3,
+                          ),
+                        ),
+                      ];
+                    }
+                    if (filtered.isEmpty) {
+                      Widget centerChild;
+                      if (_searchQuery.isNotEmpty) {
+                        centerChild = Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 84,
+                              height: 84,
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF13131B) : const Color(0xFFEFEFF5),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.search_off, size: 38, color: Colors.grey.withValues(alpha: 0.6)),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              'No results for "$_searchQuery"',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Try a shorter or different name',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        );
+                      } else if (!_showTrash && _filterScheduledOnly) {
+                        centerChild = SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.timer_outlined, size: 56, color: Colors.amber),
+                              const SizedBox(height: 14),
+                              Text(
+                                'No scheduled deletions',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Schedule a screenshot to see its countdown here',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        );
+                      } else if (!_showTrash && _filterPinnedOnly) {
+                        centerChild = SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.push_pin_outlined, size: 56, color: Colors.teal),
+                              const SizedBox(height: 14),
+                              Text(
+                                'Nothing pinned yet',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Use "Keep Forever" to protect screenshots from deletion',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        );
+                      } else {
+                        centerChild = SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: _showTrash
+                                ? [
+                                    Container(
+                                      width: 84,
+                                      height: 84,
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF13131B) : const Color(0xFFFEF2F2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.delete_sweep_outlined, size: 38, color: Colors.redAccent),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      'Trash is empty',
+                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Deleted screenshots rest here for 7 days',
+                                      style: Theme.of(context).textTheme.bodyMedium,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ]
+                                : [
+                                    Container(
+                                      width: 84,
+                                      height: 84,
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF13131B) : const Color(0xFFEEF2FF),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.screenshot_monitor_outlined,
+                                        size: 38,
+                                        color: Color(0xFF4F46E5),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      'No screenshots yet',
+                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _isEnabled
+                                          ? 'Take one — ShotKeeper will catch it'
+                                          : 'Turn on auto-detect to start capturing',
+                                      style: Theme.of(context).textTheme.bodyMedium,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                          ),
+                        );
+                      }
+                      return [
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(child: centerChild),
+                        ),
+                      ];
+                    }
+                    return [
+                      SliverGrid(
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: crossAxisCount,
                           crossAxisSpacing: 8,
                           mainAxisSpacing: 8,
                           childAspectRatio: 0.72,
                         ),
-                        itemBuilder: (_, _) => Container(
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF13131B) : const Color(0xFFEDEDF3),
-                            borderRadius: BorderRadius.circular(kRadiusTile),
-                          ),
-                        ),
-                      );
-                    }
-                    if (filtered.isEmpty) {
-                      if (_searchQuery.isNotEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 84,
-                                height: 84,
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF13131B) : const Color(0xFFEFEFF5),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(Icons.search_off, size: 38, color: Colors.grey.withValues(alpha: 0.6)),
-                              ),
-                              const SizedBox(height: 14),
-                              Text(
-                                'No results for "$_searchQuery"',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Try a shorter or different name',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                      if (!_showTrash && _filterScheduledOnly) {
-                        return Center(
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.timer_outlined, size: 56, color: Colors.amber),
-                                const SizedBox(height: 14),
-                                Text(
-                                  'No scheduled deletions',
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Schedule a screenshot to see its countdown here',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      if (!_showTrash && _filterPinnedOnly) {
-                        return Center(
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.push_pin_outlined, size: 56, color: Colors.teal),
-                                const SizedBox(height: 14),
-                                Text(
-                                  'Nothing pinned yet',
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Use "Keep Forever" to protect screenshots from deletion',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      return Center(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: _showTrash
-                              ? [
-                                  Container(
-                                    width: 84,
-                                    height: 84,
-                                    decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF13131B) : const Color(0xFFFEF2F2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.delete_sweep_outlined, size: 38, color: Colors.redAccent),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    'Trash is empty',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Deleted screenshots rest here for 7 days',
-                                    style: Theme.of(context).textTheme.bodyMedium,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ]
-                              : [
-                                  Container(
-                                    width: 84,
-                                    height: 84,
-                                    decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF13131B) : const Color(0xFFEEF2FF),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.screenshot_monitor_outlined,
-                                      size: 38,
-                                      color: Color(0xFF4F46E5),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    'No screenshots yet',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _isEnabled
-                                        ? 'Take one — ShotKeeper will catch it'
-                                        : 'Turn on auto-detect to start capturing',
-                                    style: Theme.of(context).textTheme.bodyMedium,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                        ),
-                        ),
-                      );
-                    }
-                    return GridView.builder(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: crossAxisCount,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                        childAspectRatio: 0.72,
-                      ),
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        final item = filtered[index];
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final item = filtered[index];
                         final name = item['name']?.toString() ?? 'unknown';
                             final path = item['path']?.toString() ?? '';
                             final origPath = item['origPath']?.toString() ?? path;
@@ -2507,17 +2547,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               onLongPress: () => _toggleBatchSelection(path),
                             );
                           },
-                        );
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+                          childCount: filtered.length,
+                        ),
+                      ),
+                    ];
+                  }
 }
 
 // ---- Grid tile widgets ------------------------------------------------------

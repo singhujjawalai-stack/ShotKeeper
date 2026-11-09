@@ -27,7 +27,7 @@
 
 ## Download
 
-**Latest:** [ShotKeeper-v1.4.1-release.apk](releases/ShotKeeper-v1.4.1-release.apk) — Trash sync fixes, batch Delete/Unschedule in gallery, batch Restore/Delete in trash (v1.4.1)
+**Latest:** [ShotKeeper-v1.4.2-release.apk](releases/ShotKeeper-v1.4.2-release.apk) — Back unwinds views instead of closing, landscape scroll fix (v1.4.2)
 
 **Previous:** [ShotKeeper-v1.1-release.apk](releases/ShotKeeper-v1.1-release.apk) — Search functionality (v1.1.0)  
 [ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk) — Initial release

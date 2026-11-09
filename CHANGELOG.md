@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.4.2 — 2026-11-09
+- Smarter back button: batch selection, trash view, Scheduled/Pinned filter views and search are unwound layer by layer on Back before the app closes
+- Landscape fix: the whole screen is now one scrollable viewport — the top section, stats and controls scroll away in landscape so the gallery is always reachable
+- Countdown ticks now refresh the whole screen state instead of a scoped subtree
+
 ## v1.4.1 — 2026-11-08
 - Trash sync fixes: counter and trash view now update instantly after any delete, undo, due-deletion or restore; deleted-via-notification shots show up without a manual refresh
 - App reconciles all data (gallery / trash / schedules / pins) every time it returns to the foreground, so native-side changes are never missed
