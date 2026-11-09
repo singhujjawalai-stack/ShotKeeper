@@ -83,7 +83,8 @@ class MainActivity : FlutterActivity() {
                 }
                 "increment_screenshot_count" -> {
                     val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                    val current = prefs.getInt("flutter.shot_keeper_screenshot_count", 0)
+                    // Defensive read: Dart-written ints land as Long (see detector fix).
+                    val current = (prefs.all["flutter.shot_keeper_screenshot_count"] as? Number)?.toInt() ?: 0
                     val updated = current + 1
                     prefs.edit().putInt("flutter.shot_keeper_screenshot_count", updated).apply()
                     result.success(updated.toString())
@@ -143,7 +144,8 @@ class MainActivity : FlutterActivity() {
                 }
                 "get_count" -> {
                     val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                    val count = prefs.getInt("flutter.shot_keeper_screenshot_count", 0)
+                    // Defensive read: Dart-written ints land as Long (see detector fix).
+                    val count = (prefs.all["flutter.shot_keeper_screenshot_count"] as? Number)?.toInt() ?: 0
                     result.success(count.toString())
                 }
                 "get_scheduled_deletions" -> {

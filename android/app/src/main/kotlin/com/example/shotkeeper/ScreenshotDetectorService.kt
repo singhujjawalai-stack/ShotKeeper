@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.database.ContentObserver
 import android.net.Uri
@@ -145,7 +146,14 @@ class ScreenshotDetectorService : Service() {
         }
         lastScanSeconds = scanStart
         prefs.edit().putStringSet(KEY_PROCESSED, processedIds.toSet()).putLong(KEY_LAST_SCAN, lastScanSeconds).apply()
-        found.forEach { (uri, name) -> reportScreenshot(uri, name) }
+        found.forEach { (uri, name) ->
+            try {
+                reportScreenshot(uri, name)
+            } catch (t: Throwable) {
+                // One bad screenshot must never kill the scan loop.
+                Log.e(TAG, "reportScreenshot failed for $name", t)
+            }
+        }
     }
 
     private fun isScreenshot(displayName: String, relativePath: String): Boolean {
@@ -154,12 +162,21 @@ class ScreenshotDetectorService : Service() {
             name.contains("screenshot") || name.contains("screen_shot") || name.contains("screencap")
     }
 
+    /**
+     * Dart's shared_preferences stores ints as Long on Android, so a plain
+     * getInt() on a key written from the Flutter side throws ClassCastException
+     * and (before the fix) killed the whole process mid-scan. Read numbers
+     * defensively instead.
+     */
+    private fun readFlutterInt(prefs: SharedPreferences, key: String, default: Int): Int =
+        (prefs.all[key] as? Number)?.toInt() ?: default
+
     private fun reportScreenshot(uri: String, displayName: String) {
         val path = getPathFromUri(uri)
         val logFile = File(getExternalFilesDir(null), "service_verification_log.txt")
         logFile.appendText("[${System.currentTimeMillis()}] REPORT: $displayName path=$path count=${count+1}\n")
         val flutterPrefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-        count = flutterPrefs.getInt("flutter.shot_keeper_screenshot_count", 0) + 1
+        count = readFlutterInt(flutterPrefs, "flutter.shot_keeper_screenshot_count", 0) + 1
         flutterPrefs.edit().putInt("flutter.shot_keeper_screenshot_count", count).apply()
 
         // Auto-pilot rule: schedule retention for the new screenshot instantly,
@@ -168,7 +185,7 @@ class ScreenshotDetectorService : Service() {
         var autoScheduled = false
         val autoEnabled = flutterPrefs.getBoolean("flutter.shot_keeper_auto_enabled", false)
         if (autoEnabled && path != null && !DeletionManager.isPinned(this, path)) {
-            val seconds = flutterPrefs.getInt("flutter.shot_keeper_auto_seconds", 24 * 60 * 60)
+            val seconds = readFlutterInt(flutterPrefs, "flutter.shot_keeper_auto_seconds", 24 * 60 * 60)
             DeletionManager.scheduleDeletion(this, path, seconds.toLong())
             autoScheduled = true
             Log.i(TAG, "Auto-pilot scheduled deletion for $displayName in ${seconds}s")
@@ -205,8 +222,11 @@ class ScreenshotDetectorService : Service() {
         null
     }
 
-    private fun getFlutterCount(): Int = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-        .getInt("flutter.shot_keeper_screenshot_count", 0)
+    private fun getFlutterCount(): Int = readFlutterInt(
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE),
+        "flutter.shot_keeper_screenshot_count",
+        0,
+    )
 
     private fun buildStatusNotification(): Notification {
         val scheduled = DeletionManager.getScheduledDeletions(this)

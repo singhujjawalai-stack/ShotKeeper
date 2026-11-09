@@ -27,7 +27,7 @@
 
 ## Download
 
-**Latest:** [ShotKeeper-v1.4.4-release.apk](releases/ShotKeeper-v1.4.4-release.apk) — Android 15+ reliability: specialUse FGS type, crash-proof boot start, no more "has stopped" popups (v1.4.4)
+**Latest:** [ShotKeeper-v1.4.5-release.apk](releases/ShotKeeper-v1.4.5-release.apk) — auto-pilot fixed (Long/Int pref crash killed detection on every new screenshot) (v1.4.5)
 
 **Previous:** [ShotKeeper-v1.1-release.apk](releases/ShotKeeper-v1.1-release.apk) — Search functionality (v1.1.0)  
 [ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk) — Initial release

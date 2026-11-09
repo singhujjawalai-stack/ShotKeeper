@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.5 — 2026-11-09
+- Fixed auto-pilot not deleting new screenshots: the detector read the Flutter-written rule pref (`shot_keeper_auto_seconds`) with native `getInt()`, but Dart's `shared_preferences` stores ints as Long on Android — a `ClassCastException` crashed the whole detection process the moment a new screenshot was found (confirmed in the device crash log). All native reads of Dart-written int prefs now go through a defensive `prefs.all[key] as? Number` lookup
+- Scan loop is now crash-proof per screenshot: one bad entry can never abort the scan again
+
 ## v1.4.4 — 2026-11-09
 - Crash fix for Android 15/16/17: the detector no longer starts with the restricted `dataSync` foreground type — now `specialUse`, which has no 6-hour runtime cap and is not blocked on boot. Fixes both the "ShotKeeper has stopped working" popups (boot-time crash loop) and the service being killed during the day
 - Boot path hardened: instead of starting the service straight from BOOT_COMPLETED, a 2-second exact alarm retries from an exempt context
