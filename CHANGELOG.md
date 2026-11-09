@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.4.3 — 2026-11-09
+- Trashed shots are now viewable: "View Full Image" in the trash popup opens the fullscreen swipeable viewer over all trashed items, zoom and share included
+
 ## v1.4.2 — 2026-11-09
 - Smarter back button: batch selection, trash view, Scheduled/Pinned filter views and search are unwound layer by layer on Back before the app closes
 - Landscape fix: the whole screen is now one scrollable viewport — the top section, stats and controls scroll away in landscape so the gallery is always reachable

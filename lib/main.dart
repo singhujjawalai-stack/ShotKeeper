@@ -1184,6 +1184,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (shots.isEmpty) return;
 
     final startIdx = shots.indexWhere((s) => s.path == initialPath);
+    _openShotsViewer(shots, startIdx < 0 ? 0 : startIdx);
+  }
+
+  /// Opens the swipeable fullscreen viewer over the trashed items, newest
+  /// trash placement first (longest remaining grace period first).
+  void _openTrashViewer(String originalPath) {
+    final shots = _trash.entries
+        .map((entry) => (
+              path: entry.value['trash']?.toString() ?? '',
+              name: entry.value['name']?.toString() ?? 'unknown',
+              expiry: (entry.value['expiry'] as num?)?.toInt() ?? 0,
+            ))
+        .where((s) => s.path.isNotEmpty)
+        .toList()
+      ..sort((a, b) => b.expiry.compareTo(a.expiry));
+    if (shots.isEmpty) return;
+
+    final startIdx = shots.indexWhere((s) => s.path == originalPath);
+    _openShotsViewer(
+      shots.map((s) => (path: s.path, name: s.name)).toList(),
+      startIdx < 0 ? 0 : startIdx,
+    );
+  }
+
+  void _openShotsViewer(List<({String path, String name})> shots, int initialIndex) {
     Navigator.of(context).push(
       PageRouteBuilder(
         opaque: true,
@@ -1191,7 +1216,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         reverseTransitionDuration: const Duration(milliseconds: 180),
         pageBuilder: (_, _, _) => _ScreenshotViewer(
           shots: shots,
-          initialIndex: startIdx < 0 ? 0 : startIdx,
+          initialIndex: initialIndex.clamp(0, shots.length - 1),
           onShare: _shareScreenshot,
         ),
         transitionsBuilder: (_, animation, _, child) => FadeTransition(
@@ -1492,6 +1517,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.fullscreen),
+                  title: const Text('View Full Image'),
+                  subtitle: _trash.length > 1 ? const Text('Swipe to browse trashed shots') : null,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openTrashViewer(originalPath);
+                  },
+                ),
                 ListTile(
                   leading: const Icon(Icons.restore, color: Color(0xFF4F46E5)),
                   title: const Text('Restore to Gallery'),

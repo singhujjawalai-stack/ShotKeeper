@@ -27,7 +27,7 @@
 
 ## Download
 
-**Latest:** [ShotKeeper-v1.4.2-release.apk](releases/ShotKeeper-v1.4.2-release.apk) — Back unwinds views instead of closing, landscape scroll fix (v1.4.2)
+**Latest:** [ShotKeeper-v1.4.3-release.apk](releases/ShotKeeper-v1.4.3-release.apk) — View trashed shots fullscreen (swipe/zoom/share) from the trash popup (v1.4.3)
 
 **Previous:** [ShotKeeper-v1.1-release.apk](releases/ShotKeeper-v1.1-release.apk) — Search functionality (v1.1.0)  
 [ShotKeeper-v1.0-release.apk](releases/ShotKeeper-v1.0-release.apk) — Initial release
