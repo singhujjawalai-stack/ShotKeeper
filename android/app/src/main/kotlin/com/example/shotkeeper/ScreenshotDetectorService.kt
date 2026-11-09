@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
@@ -45,8 +46,15 @@ class ScreenshotDetectorService : Service() {
         isRunning = true
         val logFile = File(getExternalFilesDir(null), "service_verification_log.txt")
         logFile.appendText("[${System.currentTimeMillis()}] SERVICE CREATED\n")
-        createNotificationChannels()
-        startForeground(NOTIFICATION_ID, buildStatusNotification())
+        if (!enterForeground()) {
+            // startForeground was rejected by the OS (some FGS entry paths are
+            // restricted on newer Android). Never crash the process — the
+            // watchdog/restart alarms will bring us back from an allowed context.
+            Log.e(TAG, "Could not enter foreground; stopping and scheduling retry")
+            DeletionManager.scheduleServiceRestart(this, 60_000L)
+            stopSelf()
+            return
+        }
         // Make sure the revive-watchdog is armed (self-rescheduling exact alarm).
         DeletionManager.scheduleWatchdog(this)
         workerThread = HandlerThread("ShotKeeperMediaScan").also { it.start() }
@@ -219,6 +227,29 @@ class ScreenshotDetectorService : Service() {
 
     private fun updateStatusNotification() {
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildStatusNotification())
+    }
+
+    /**
+     * Enters foreground with the specialUse type (no 6-hour dataSync cap on
+     * modern Android, and no BOOT_COMPLETED restriction). Returns false — never
+     * throws — if the OS refuses the promotion, so a blocked start can't crash
+     * the process or spam "has stopped" dialogs.
+     */
+    private fun enterForeground(): Boolean = try {
+        createNotificationChannels()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                buildStatusNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, buildStatusNotification())
+        }
+        true
+    } catch (t: Throwable) {
+        Log.e(TAG, "startForeground rejected", t)
+        false
     }
 
     private fun createNotificationChannels() {

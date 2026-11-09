@@ -1,9 +1,12 @@
 package com.example.shotkeeper
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 
 /**
@@ -38,7 +41,7 @@ class DeletionAlarmReceiver : BroadcastReceiver() {
                 startDetectorIfEnabled(context)
             }
             DeletionManager.ACTION_RESTART_SERVICE -> startDetectorIfEnabled(context)
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> startDetectorIfEnabled(context)
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> startDetectorFromBoot(context)
             else -> Log.i(TAG, "Unknown action ignored: $action")
         }
     }
@@ -54,6 +57,30 @@ class DeletionAlarmReceiver : BroadcastReceiver() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Could not (re)start detector service", e)
+        }
+    }
+
+    /**
+     * On newer Android (15+), starting a foreground service straight out of
+     * BOOT_COMPLETED is restricted for several FGS types. Bounce the start
+     * through a short exact alarm instead — alarm-triggered starts are on the
+     * allowed exemption list, so the detector comes back after every reboot.
+     */
+    private fun startDetectorFromBoot(context: Context) {
+        try {
+            val am = context.getSystemService(AlarmManager::class.java) ?: return
+            val bounce = PendingIntent.getBroadcast(
+                context,
+                2001,
+                Intent(context, DeletionAlarmReceiver::class.java)
+                    .setAction(DeletionManager.ACTION_RESTART_SERVICE),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val triggerAt = SystemClock.elapsedRealtime() + 2_000L
+            am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, bounce)
+        } catch (e: Exception) {
+            Log.e(TAG, "Boot bounce failed; trying direct start", e)
+            startDetectorIfEnabled(context)
         }
     }
 }

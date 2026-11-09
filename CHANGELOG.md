@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.4.4 — 2026-11-09
+- Crash fix for Android 15/16/17: the detector no longer starts with the restricted `dataSync` foreground type — now `specialUse`, which has no 6-hour runtime cap and is not blocked on boot. Fixes both the "ShotKeeper has stopped working" popups (boot-time crash loop) and the service being killed during the day
+- Boot path hardened: instead of starting the service straight from BOOT_COMPLETED, a 2-second exact alarm retries from an exempt context
+- `startForeground` is now crash-proof in both services — if the OS rejects a foreground promotion, the process stops gracefully and the watchdog revives it in 1 minute instead of crashing
+
 ## v1.4.3 — 2026-11-09
 - Trashed shots are now viewable: "View Full Image" in the trash popup opens the fullscreen swipeable viewer over all trashed items, zoom and share included
 

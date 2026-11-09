@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -22,8 +22,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <service android:name=".ScreenshotDetectorService" android:exported="false" android:foregroundServiceType="dataSync" />
-        <service android:name=".DeletionJobService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".ScreenshotDetectorService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Continuous screenshot retention monitoring and scheduled deletion management" />
+        </service>
+        <service android:name=".DeletionJobService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Executing scheduled screenshot deletions" />
+        </service>
         <activity android:name=".ScreenshotDialogActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <receiver android:name=".DeletionAlarmReceiver" android:exported="true">
             <intent-filter>

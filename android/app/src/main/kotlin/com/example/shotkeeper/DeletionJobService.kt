@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.*
 import android.util.Log
 
@@ -17,12 +18,29 @@ class DeletionJobService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("ShotKeeper")
-            .setContentText("Managing screenshot retention...")
-            .setSmallIcon(android.R.drawable.ic_menu_delete)
-            .build())
+        try {
+            createNotificationChannel()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    Notification.Builder(this, CHANNEL_ID)
+                        .setContentTitle("ShotKeeper")
+                        .setContentText("Managing screenshot retention...")
+                        .setSmallIcon(android.R.drawable.ic_menu_delete)
+                        .build(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, Notification.Builder(this, CHANNEL_ID)
+                    .setContentTitle("ShotKeeper")
+                    .setContentText("Managing screenshot retention...")
+                    .setSmallIcon(android.R.drawable.ic_menu_delete)
+                    .build())
+            }
+        } catch (t: Throwable) {
+            // Never crash the process over a foreground promotion on newer Android.
+            Log.e(TAG, "startForeground rejected; continuing without FGS", t)
+        }
     }
 
     private fun createNotificationChannel() {
